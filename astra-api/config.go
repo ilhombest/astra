@@ -81,7 +81,7 @@ func jsonToLua(cfg map[string]any) string {
 		if !ok {
 			continue
 		}
-		sb.WriteString("make_stream({\n")
+		sb.WriteString("make_channel({\n")
 		for _, key := range []string{"name", "id", "type"} {
 			if val, ok := s[key].(string); ok && val != "" {
 				sb.WriteString(fmt.Sprintf("  %s=%q,\n", key, val))

@@ -68,6 +68,35 @@ func handleControl(w http.ResponseWriter, r *http.Request) {
 		}
 		json.NewEncoder(w).Encode(out)
 
+	case "set-stream":
+		id, _ := req["id"].(string)
+		streamMap, _ := req["stream"].(map[string]any)
+		if id == "" || streamMap == nil {
+			jsonError(w, "id and stream required", http.StatusBadRequest)
+			return
+		}
+		cfg, err := loadConfig()
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		streams, _ := cfg["streams"].(map[string]any)
+		if streams == nil {
+			streams = map[string]any{}
+			cfg["streams"] = streams
+		}
+		if remove, _ := streamMap["remove"].(bool); remove {
+			delete(streams, id)
+		} else {
+			streams[id] = streamMap
+		}
+		if err := saveConfig(cfg); err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = restartAstra()
+		json.NewEncoder(w).Encode(map[string]bool{"status": true})
+
 	default:
 		jsonError(w, "unknown command", http.StatusBadRequest)
 	}
