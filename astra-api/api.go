@@ -274,7 +274,7 @@ const (
 
 func readDVBStatus(adapter, device int) (lock bool, signal, snr, ber int) {
 	path := fmt.Sprintf("/dev/dvb/adapter%d/frontend%d", adapter, device)
-	f, err := os.OpenFile(path, os.O_RDWR|syscall.O_NONBLOCK, 0)
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return
 	}
