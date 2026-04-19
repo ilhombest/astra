@@ -63,6 +63,16 @@ func handleScanAdapter(w http.ResponseWriter, r *http.Request, adapterID string)
 	tmp.WriteString(lua)
 	tmp.Close()
 
+	// DVB adapters use exclusive O_RDWR locking — stop main astra to release the adapter
+	addLog("info", fmt.Sprintf("[scan] adapter %s: stopping main astra to release DVB lock", adapterID))
+	stopAstra()
+	time.Sleep(800 * time.Millisecond)
+	defer func() {
+		addLog("info", fmt.Sprintf("[scan] adapter %s: restarting main astra", adapterID))
+		time.Sleep(300 * time.Millisecond)
+		startAstra()
+	}()
+
 	addLog("info", fmt.Sprintf("[scan] adapter %s: starting scan", adapterID))
 
 	ctx, cancel := context.WithTimeout(r.Context(), 28*time.Second)
@@ -114,6 +124,13 @@ outer:
 
 	output := buf.String()
 	addLog("info", fmt.Sprintf("[scan] adapter %s: scan finished, parsing output", adapterID))
+	if len(output) > 0 {
+		preview := output
+		if len(preview) > 3000 {
+			preview = preview[:3000]
+		}
+		addLog("info", fmt.Sprintf("[scan] adapter %s raw output:\n%s", adapterID, preview))
+	}
 
 	services := parseSDTOutput(output)
 	addLog("info", fmt.Sprintf("[scan] adapter %s: found %d services", adapterID, len(services)))
