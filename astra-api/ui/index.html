@@ -105,6 +105,22 @@ tr:hover td{background:#fafbff}
 /* Sections */
 .section{display:none}
 .section.active{display:block}
+
+/* Scan overlay */
+#scan-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;z-index:200;align-items:center;justify-content:center}
+#scan-overlay.show{display:flex}
+#scan-modal{background:#fff;border-radius:12px;width:700px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+#scan-head{padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between}
+#scan-head h3{font-size:16px;font-weight:600}
+#scan-body{padding:16px;overflow-y:auto;flex:1}
+.spinner{display:inline-block;width:20px;height:20px;border:3px solid #e5e7eb;border-top-color:#4e8ef7;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scan-info{color:#666;font-size:13px;padding:20px;text-align:center}
+.svc-row{display:flex;align-items:center;padding:8px 4px;border-bottom:1px solid #f0f2f5;gap:10px}
+.svc-row:last-child{border-bottom:none}
+.svc-pnr{font-family:monospace;background:#f3f4f6;border-radius:4px;padding:2px 6px;font-size:12px;color:#555;min-width:50px;text-align:center}
+.svc-name{flex:1;font-size:13px}
+.svc-prov{font-size:11px;color:#9ca3af}
 </style>
 </head>
 <body>
@@ -233,6 +249,19 @@ tr:hover td{background:#fafbff}
 </div>
 
 <div id="toast"></div>
+
+<!-- Scan overlay (separate from main modal) -->
+<div id="scan-overlay">
+  <div id="scan-modal">
+    <div id="scan-head">
+      <h3 id="scan-title">Scanning transponder…</h3>
+      <button style="background:none;border:none;font-size:20px;cursor:pointer;color:#888" onclick="closeScan()">✕</button>
+    </div>
+    <div id="scan-body">
+      <div class="scan-info"><span class="spinner"></span>Scanning… please wait up to 25 seconds</div>
+    </div>
+  </div>
+</div>
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
@@ -438,6 +467,7 @@ async function loadAdapters() {
         <td>${sr ? sr+' kBd' : '—'}</td>
         <td>${badge(bool(a.enabled)!==false)}</td>
         <td>
+          <button class="btn-icon" title="Scan channels" onclick="scanAdapter('${esc(a._id||'')}')">📡</button>
           <button class="btn-icon" title="Edit" onclick='openAdapterModal(${JSON.stringify(a)})'>✏️</button>
           <button class="btn-icon" title="Delete" onclick="deleteAdapter('${esc(a._id||'')}')">🗑️</button>
         </td>
@@ -595,6 +625,67 @@ async function deleteCam(id) {
   if (!confirm('Delete this NewCamd server?')) return;
   try { await api('DELETE','cams/'+id); toast('Deleted'); loadCams(); }
   catch(e) { toast(e.message,true); }
+}
+
+// ── Scan ───────────────────────────────────────────────────────────────────
+function closeScan() {
+  document.getElementById('scan-overlay').classList.remove('show');
+}
+
+async function scanAdapter(id) {
+  const overlay = document.getElementById('scan-overlay');
+  document.getElementById('scan-title').textContent = 'Scanning transponder…';
+  document.getElementById('scan-body').innerHTML =
+    '<div class="scan-info"><span class="spinner"></span>Scanning… please wait up to 25 seconds</div>';
+  overlay.classList.add('show');
+
+  try {
+    const res = await api('POST', 'adapters/' + id + '/scan');
+    const services = res.services || [];
+    document.getElementById('scan-title').textContent =
+      `Found ${services.length} service${services.length!==1?'s':''} on adapter ${res.adapter}`;
+
+    if (!services.length) {
+      document.getElementById('scan-body').innerHTML =
+        '<div class="scan-info">No services found. Check signal and adapter settings.</div>';
+      return;
+    }
+
+    document.getElementById('scan-body').innerHTML = `
+      <div style="font-size:12px;color:#888;padding:8px 4px;border-bottom:2px solid #e5e7eb;display:flex;gap:10px">
+        <span style="min-width:50px">PNR/SID</span>
+        <span style="flex:1">Service Name</span>
+        <span style="width:80px"></span>
+      </div>
+      ${services.map(s => `
+        <div class="svc-row">
+          <span class="svc-pnr">${s.sid}</span>
+          <span class="svc-name">
+            <b>${esc(s.name || '(unnamed)')}</b>
+            ${s.provider ? `<br><span class="svc-prov">${esc(s.provider)}</span>` : ''}
+          </span>
+          <button class="btn btn-success btn-sm" onclick="addServiceAsStream(${res.adapter}, ${s.sid}, '${esc(s.name||'Channel '+s.sid).replace(/'/g,"\\'")}')">+ Add</button>
+        </div>`).join('')}`;
+  } catch(e) {
+    document.getElementById('scan-body').innerHTML =
+      `<div class="scan-info" style="color:#ef4444">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+async function addServiceAsStream(adapterNum, sid, name) {
+  try {
+    const inputUrl = `dvb://${adapterNum}#pnr=${sid}`;
+    await api('POST', 'streams', {
+      name:   name,
+      enable: true,
+      type:   'spts',
+      input:  [inputUrl],
+      output: [],
+    });
+    toast(`Stream "${name}" created`);
+  } catch(e) {
+    toast(e.message, true);
+  }
 }
 
 // ── Log ────────────────────────────────────────────────────────────────────
