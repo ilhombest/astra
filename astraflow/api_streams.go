@@ -86,33 +86,6 @@ func apiSaveStream(ctx *ApiCtx) map[string]any {
 	}
 
 	// --------------------------------
-	// send to astra
-	// --------------------------------
-	s := map[string]any{
-		"id":           sid,
-		"name":         name,
-		"service_name": translit(name),
-		"type":         "spts",
-		"enable":       enable,
-		"input":        inputs,
-		"output":       outputs,
-	}
-
-	if prov := strings.TrimSpace(getSetting("provider", "")); prov != "" {
-		s["service_provider"] = prov
-	}
-
-	_, err := astraCommandJSON(node.Address, node.Auth, map[string]any{
-		"id":     sid,
-		"cmd":    "set-stream",
-		"stream": s,
-	})
-	if err != nil {
-		out["status"] = err.Error()
-		return out
-	}
-
-	// --------------------------------
 	// save ports
 	// --------------------------------
 	var firstInputID uint
@@ -209,10 +182,7 @@ func apiSaveStream(ctx *ApiCtx) map[string]any {
 		}
 	}
 
-	if err := node.UpdateConfig(); err != nil {
-		out["status"] = err.Error()
-		return out
-	}
+	go deployNodeToAstra(node)
 
 	out["status"] = "OK"
 	out["stream_id"] = stream.ID
@@ -279,18 +249,6 @@ func apiDeleteStream(ctx *ApiCtx) map[string]any {
 		return out
 	}
 
-	_, err := astraCommandJSON(node.Address, node.Auth, map[string]any{
-		"cmd": "set-stream",
-		"id":  stream.AstraID,
-		"stream": map[string]any{
-			"remove": true,
-		},
-	})
-	if err != nil {
-		out["status"] = err.Error()
-		return out
-	}
-
 	var ports []ClusterPort
 	if err := db.Where("stream_id = ?", stream.ID).Find(&ports).Error; err != nil {
 		out["status"] = err.Error()
@@ -321,6 +279,8 @@ func apiDeleteStream(ctx *ApiCtx) map[string]any {
 		out["status"] = err.Error()
 		return out
 	}
+
+	go deployNodeToAstra(node)
 
 	out["status"] = "OK"
 	return out
