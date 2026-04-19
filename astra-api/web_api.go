@@ -147,10 +147,19 @@ func handleAdaptersAPI(w http.ResponseWriter, r *http.Request) {
 		adaptersListHandler(w, r)
 	case path == "adapters" && r.Method == http.MethodPost:
 		adaptersCreateHandler(w, r)
-	case strings.HasPrefix(path, "adapters/") && r.Method == http.MethodPut:
-		adaptersUpdateHandler(w, r, idFromPath(path, "adapters"))
-	case strings.HasPrefix(path, "adapters/") && r.Method == http.MethodDelete:
-		adaptersDeleteHandler(w, r, idFromPath(path, "adapters"))
+	case strings.HasPrefix(path, "adapters/"):
+		id := idFromPath(path, "adapters")
+		rest := strings.TrimPrefix(path, "adapters/"+id)
+		switch {
+		case rest == "/scan":
+			handleScanAdapter(w, r, id)
+		case rest == "" && r.Method == http.MethodPut:
+			adaptersUpdateHandler(w, r, id)
+		case rest == "" && r.Method == http.MethodDelete:
+			adaptersDeleteHandler(w, r, id)
+		default:
+			http.Error(w, "not found", 404)
+		}
 	default:
 		http.Error(w, "not found", 404)
 	}
