@@ -143,6 +143,23 @@ func jsonToLua(cfg map[string]any) string {
 		sb.WriteString("})\n\n")
 	}
 
+	// newcamd({}) blocks — cam_id = newcamd({...})
+	cams, _ := cfg["cams"].(map[string]any)
+	for camID, v := range cams {
+		c, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		sb.WriteString(fmt.Sprintf("%s = newcamd({\n", camID))
+		sb.WriteString(fmt.Sprintf("  name = %q,\n", anyStr(c["name"])))
+		sb.WriteString(fmt.Sprintf("  host = %q,\n", anyStr(c["host"])))
+		sb.WriteString(fmt.Sprintf("  port = %s,\n", anyStr(c["port"])))
+		sb.WriteString(fmt.Sprintf("  user = %q,\n", anyStr(c["user"])))
+		sb.WriteString(fmt.Sprintf("  pass = %q,\n", anyStr(c["pass"])))
+		sb.WriteString(fmt.Sprintf("  key  = %q,\n", anyStr(c["key"])))
+		sb.WriteString("})\n\n")
+	}
+
 	// make_channel blocks for streams
 	streams, _ := cfg["streams"].(map[string]any)
 	for _, v := range streams {
@@ -168,6 +185,14 @@ func jsonToLua(cfg map[string]any) string {
 		}
 		if output := toStringSliceLua(s["output"]); len(output) > 0 {
 			sb.WriteString(fmt.Sprintf("  output={%s},\n", joinQuoted(output)))
+		}
+		// BISS key
+		if biss := anyStr(s["biss"]); biss != "" {
+			sb.WriteString(fmt.Sprintf("  biss=%q,\n", biss))
+		}
+		// CAM reference (variable name stored as string)
+		if cam := anyStr(s["cam"]); cam != "" {
+			sb.WriteString(fmt.Sprintf("  cam=%s,\n", cam))
 		}
 		sb.WriteString("})\n\n")
 	}

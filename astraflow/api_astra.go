@@ -36,6 +36,23 @@ func deployNodeToAstra(node ClusterNode) error {
 		}
 	}
 
+	// newcamd servers
+	var ncServers []NewcamdServer
+	db.Where("node_id = ? AND enabled = ?", node.NodeID, true).Find(&ncServers)
+	camsMap := map[string]any{}
+	for _, nc := range ncServers {
+		camID := fmt.Sprintf("cam_%d", nc.ID)
+		camsMap[camID] = map[string]any{
+			"type": "newcamd",
+			"name": nc.Name,
+			"host": nc.Host,
+			"port": nc.Port,
+			"user": nc.Username,
+			"pass": nc.Password,
+			"key":  nc.DESKey,
+		}
+	}
+
 	// streams + ports
 	var streams []ClusterStream
 	db.Where("node_id = ?", node.NodeID).Find(&streams)
@@ -52,7 +69,7 @@ func deployNodeToAstra(node ClusterNode) error {
 		for i, p := range outputPorts {
 			outputs[i] = p.Address
 		}
-		streamMap[s.AstraID] = map[string]any{
+		entry := map[string]any{
 			"id":     s.AstraID,
 			"name":   s.Name,
 			"enable": s.Enable,
@@ -60,10 +77,15 @@ func deployNodeToAstra(node ClusterNode) error {
 			"input":  inputs,
 			"output": outputs,
 		}
+		if s.BissMode > 0 && s.BissKey != "" {
+			entry["biss"] = s.BissKey
+		}
+		streamMap[s.AstraID] = entry
 	}
 
 	cfg := map[string]any{
 		"adapters": adapterMap,
+		"cams":     camsMap,
 		"streams":  streamMap,
 	}
 
