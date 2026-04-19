@@ -4,6 +4,7 @@ import MainPage from "pages/MainPage.jsx";
 import DashboardPage from "pages/DashboardPage.jsx";
 import SessionsPage from "pages/SessionsPage.jsx";
 import LogPage from "pages/LogPage.jsx";
+import SoftcamPage from "pages/SoftcamPage.jsx";
 import ExitPage from "components/Auth/ExitPage";
 import { Container } from "@mui/material";
 import SettingsPage from "pages/SettingsPage";
@@ -21,6 +22,7 @@ export const staticRoutes = [
   { path: "/flow",    element: <MainPage /> },
   { path: "/sessions", element: <SessionsPage /> },
   { path: "/log",     element: <LogPage /> },
+  { path: "/softcam", element: <SoftcamPage /> },
   { path: "/profile", element: <Container maxWidth="xl"><SettingsPage /></Container> },
   { path: "/exit",    element: <Container maxWidth="xl"><ExitPage /></Container> },
 ];

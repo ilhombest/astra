@@ -12,7 +12,8 @@
     "export": "Export",
     "flow": "Flow Editor",
     "sessions": "Sessions",
-    "log": "Log"
+    "log": "Log",
+    "softcam": "Softcam"
   },
   "settings": {
     "main": "Settings",

@@ -81,6 +81,9 @@ type ClusterStream struct {
 	Enable    bool      `gorm:"default:true" json:"enable"`
 	Type      string    `gorm:"size:20;default:'spts'" json:"type"`
 	AstraID   string    `gorm:"size:50;index" json:"astra_id"`
+	// CA / Softcam
+	BissMode  int    `gorm:"default:0" json:"biss_mode"` // 0=none 1=BISS-1 2=BISS-E
+	BissKey   string `gorm:"size:32" json:"biss_key"`    // 16 or 32 hex chars
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

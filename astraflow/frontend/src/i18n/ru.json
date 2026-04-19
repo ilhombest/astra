@@ -12,7 +12,8 @@
     "export": "Экспорт",
     "flow": "Редактор",
     "sessions": "Сессии",
-    "log": "Лог"
+    "log": "Лог",
+    "softcam": "Softcam"
   },
   "settings": {
     "profile": "Профиль",
