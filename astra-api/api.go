@@ -174,6 +174,16 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(path, "stream-status/"):
 		id := strings.TrimPrefix(path, "stream-status/")
 		handleStreamStatus(w, r, id)
+	case strings.HasPrefix(path, "adapter-status/"):
+		parts := strings.SplitN(strings.TrimPrefix(path, "adapter-status/"), "/", 2)
+		adapterN, deviceN := 0, 0
+		if len(parts) >= 1 {
+			adapterN, _ = strconv.Atoi(parts[0])
+		}
+		if len(parts) >= 2 {
+			deviceN, _ = strconv.Atoi(parts[1])
+		}
+		handleAdapterStatus(w, r, adapterN, deviceN)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -236,6 +246,37 @@ func handleSystemStatus(w http.ResponseWriter, _ *http.Request) {
 		"sys_mem_usage": fmt.Sprintf("%.1f", sysMemPct),
 		"app_uptime":    uptimeMin,
 	})
+}
+
+func handleAdapterStatus(w http.ResponseWriter, _ *http.Request, adapter, device int) {
+	lock, signal, snr, ber := readDVBStatus(adapter, device)
+	json.NewEncoder(w).Encode(map[string]any{
+		"lock":    lock,
+		"signal":  signal,
+		"snr":     snr,
+		"ber":     ber,
+		"bitrate": 0,
+	})
+}
+
+// readDVBStatus reads signal stats from Linux DVB sysfs.
+// Falls back to zeros if hardware not present.
+func readDVBStatus(adapter, device int) (lock bool, signal, snr, ber int) {
+	base := fmt.Sprintf("/sys/class/dvb/dvb%d.frontend%d", adapter, device)
+	readInt := func(file string) int {
+		data, err := os.ReadFile(base + "/" + file)
+		if err != nil {
+			return 0
+		}
+		v, _ := strconv.Atoi(strings.TrimSpace(string(data)))
+		return v
+	}
+	status := readInt("status")
+	lock = (status & 0x10) != 0
+	signal = readInt("signal") * 100 / 65535
+	snr = readInt("snr") * 100 / 65535
+	ber = readInt("ber")
+	return
 }
 
 func handleStreamStatus(w http.ResponseWriter, _ *http.Request, id string) {

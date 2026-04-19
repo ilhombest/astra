@@ -50,6 +50,10 @@ var apiRoutes = map[string]APIFn{
 	"getSettings":    apiGetSettings,
 	"saveSetting":    apiSaveSetting,
 	"restartProgram": apiRestartProgram,
+	// dashboard
+	"getDashboardData":  apiGetDashboardData,
+	"getStreamStatus":   apiGetStreamStatus,
+	"getAdapterStatus":  apiGetAdapterStatus,
 	// adapters
 	"getAdapters":    apiGetAdapters,
 	"saveAdapter":    apiSaveAdapter,
