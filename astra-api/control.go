@@ -5,15 +5,21 @@ import (
 	"net/http"
 )
 
+func jsonError(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]any{"status": false, "error": msg})
+}
+
 func handleControl(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		jsonError(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
@@ -30,7 +36,7 @@ func handleControl(w http.ResponseWriter, r *http.Request) {
 	case "load":
 		cfg, err := loadConfig()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		json.NewEncoder(w).Encode(cfg)
@@ -38,18 +44,18 @@ func handleControl(w http.ResponseWriter, r *http.Request) {
 	case "upload":
 		cfg, ok := req["config"].(map[string]any)
 		if !ok {
-			http.Error(w, `"config" field required`, http.StatusBadRequest)
+			jsonError(w, `"config" field required`, http.StatusBadRequest)
 			return
 		}
 		if err := saveConfig(cfg); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]bool{"status": true})
 
 	case "restart":
 		if err := restartAstra(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]bool{"status": true})
@@ -57,12 +63,12 @@ func handleControl(w http.ResponseWriter, r *http.Request) {
 	case "sessions":
 		out, err := getSessions()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		json.NewEncoder(w).Encode(out)
 
 	default:
-		http.Error(w, "unknown command", http.StatusBadRequest)
+		jsonError(w, "unknown command", http.StatusBadRequest)
 	}
 }
