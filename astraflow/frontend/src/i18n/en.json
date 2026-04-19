@@ -10,7 +10,9 @@
     "servers": "Servers",
     "stats": "Statistics",
     "export": "Export",
-    "flow": "Flow Editor"
+    "flow": "Flow Editor",
+    "sessions": "Sessions",
+    "log": "Log"
   },
   "settings": {
     "main": "Settings",

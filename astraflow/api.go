@@ -54,6 +54,8 @@ var apiRoutes = map[string]APIFn{
 	"getDashboardData":  apiGetDashboardData,
 	"getStreamStatus":   apiGetStreamStatus,
 	"getAdapterStatus":  apiGetAdapterStatus,
+	"getAllSessions":     apiGetAllSessions,
+	"getNodeLog":        apiGetNodeLog,
 	// adapters
 	"getAdapters":    apiGetAdapters,
 	"saveAdapter":    apiSaveAdapter,

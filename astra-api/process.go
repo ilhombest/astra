@@ -1,33 +1,108 @@
 package main
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
 
-// restartAstra sends SIGHUP to the running astra process so it reloads its config.
-// If no process is running, it starts one.
+// ── log ring buffer ──────────────────────────────────────────────
+
+type LogEntry struct {
+	Time  string `json:"time"`
+	Level string `json:"level"`
+	Msg   string `json:"msg"`
+}
+
+var (
+	logBuf   []LogEntry
+	logMu    sync.RWMutex
+	maxLines = 1000
+)
+
+func addLog(level, msg string) {
+	logMu.Lock()
+	defer logMu.Unlock()
+	logBuf = append(logBuf, LogEntry{
+		Time:  time.Now().Format("2006-01-02 15:04:05"),
+		Level: level,
+		Msg:   strings.TrimSpace(msg),
+	})
+	if len(logBuf) > maxLines {
+		logBuf = logBuf[len(logBuf)-maxLines:]
+	}
+}
+
+// logWriter wraps io.Writer and copies to ring buffer
+type logWriter struct{ w io.Writer }
+
+func (l logWriter) Write(p []byte) (int, error) {
+	line := strings.TrimSpace(string(p))
+	if line != "" {
+		level := "info"
+		low := strings.ToLower(line)
+		if strings.Contains(low, "error") || strings.Contains(low, "fatal") {
+			level = "error"
+		} else if strings.Contains(low, "warn") {
+			level = "warning"
+		}
+		addLog(level, line)
+	}
+	return l.w.Write(p)
+}
+
+func initLogger() {
+	lw := logWriter{w: os.Stderr}
+	log.SetOutput(lw)
+}
+
+// captureProcess pipes cmd stdout/stderr into ring buffer
+func captureProcess(cmd *exec.Cmd) {
+	pr, pw := io.Pipe()
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+	go func() {
+		defer pr.Close()
+		scanner := bufio.NewScanner(pr)
+		for scanner.Scan() {
+			line := scanner.Text()
+			level := "info"
+			low := strings.ToLower(line)
+			if strings.Contains(low, "error") || strings.Contains(low, "fatal") {
+				level = "error"
+			} else if strings.Contains(low, "warn") {
+				level = "warning"
+			}
+			addLog(level, line)
+		}
+	}()
+}
+
+// ── process management ────────────────────────────────────────────
+
 func restartAstra() error {
 	pid, err := readPID()
 	if err != nil {
-		// no running process — start fresh
 		return startAstra()
 	}
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return startAstra()
 	}
-	// check process is actually alive
 	if err := proc.Signal(syscall.Signal(0)); err != nil {
 		return startAstra()
 	}
-	log.Printf("sending SIGHUP to astra pid=%d", pid)
+	addLog("info", fmt.Sprintf("sending SIGHUP to astra pid=%d", pid))
 	return proc.Signal(syscall.SIGHUP)
 }
 
@@ -41,16 +116,14 @@ func startAstra() error {
 		*flagConfig,
 		"--pid", *flagPidFile,
 	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	captureProcess(cmd)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start astra: %w", err)
 	}
-	log.Printf("astra started pid=%d", cmd.Process.Pid)
-	// detach — let astra manage its own lifecycle
+	addLog("info", fmt.Sprintf("astra started pid=%d", cmd.Process.Pid))
 	go func() {
 		if err := cmd.Wait(); err != nil {
-			log.Printf("astra exited: %v", err)
+			addLog("error", fmt.Sprintf("astra exited: %v", err))
 		}
 	}()
 	return nil
@@ -59,21 +132,20 @@ func startAstra() error {
 func stopAstra() error {
 	pid, err := readPID()
 	if err != nil {
-		return nil // already stopped
+		return nil
 	}
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return nil
 	}
-	log.Printf("sending SIGTERM to astra pid=%d", pid)
+	addLog("info", fmt.Sprintf("sending SIGTERM to astra pid=%d", pid))
 	if err := proc.Signal(syscall.SIGTERM); err != nil {
 		return err
 	}
-	// wait up to 5 s for clean exit
 	for i := 0; i < 50; i++ {
 		time.Sleep(100 * time.Millisecond)
 		if err := proc.Signal(syscall.Signal(0)); err != nil {
-			break // process gone
+			break
 		}
 	}
 	_ = os.Remove(*flagPidFile)
@@ -102,4 +174,18 @@ func readPID() (int, error) {
 		return 0, fmt.Errorf("invalid pid file: %w", err)
 	}
 	return pid, nil
+}
+
+// ── /api/log endpoint ──────────────────────────────────────────────
+
+func handleLog(w http.ResponseWriter, r *http.Request) {
+	logMu.RLock()
+	entries := make([]LogEntry, len(logBuf))
+	copy(entries, logBuf)
+	logMu.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"lines": entries,
+	})
 }

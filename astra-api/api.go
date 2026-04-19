@@ -169,6 +169,9 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch {
+	case path == "log":
+		handleLog(w, r)
+		return
 	case path == "system-status":
 		handleSystemStatus(w, r)
 	case strings.HasPrefix(path, "stream-status/"):

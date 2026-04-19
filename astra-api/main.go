@@ -18,6 +18,7 @@ var (
 
 func main() {
 	flag.Parse()
+	initLogger()
 
 	mux := http.NewServeMux()
 

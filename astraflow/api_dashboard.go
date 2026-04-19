@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 )
 
 type DashboardNode struct {
@@ -77,5 +78,54 @@ func apiGetAdapterStatus(ctx *ApiCtx) map[string]any {
 		return out
 	}
 	out["data"] = resp
+	return out
+}
+
+func apiGetAllSessions(ctx *ApiCtx) map[string]any {
+	out := ctx.Out
+	var nodes []ClusterNode
+	db.Where("status = ?", "online").Find(&nodes)
+
+	type NodeSessions struct {
+		Node     ClusterNode `json:"node"`
+		Sessions any         `json:"sessions"`
+		Status   string      `json:"status"`
+	}
+
+	result := make([]NodeSessions, 0, len(nodes))
+	for _, node := range nodes {
+		resp, err := node.Control("sessions")
+		ns := NodeSessions{Node: node}
+		if err != nil {
+			ns.Status = "offline"
+			ns.Sessions = []any{}
+		} else {
+			ns.Status = "online"
+			ns.Sessions = resp["sessions"]
+		}
+		result = append(result, ns)
+	}
+	out["nodes"] = result
+	return out
+}
+
+func apiGetNodeLog(ctx *ApiCtx) map[string]any {
+	out := ctx.Out
+	nodeID := strings.TrimSpace(ctx.D["node_id"])
+	if nodeID == "" {
+		out["status"] = "node_id required"
+		return out
+	}
+	var node ClusterNode
+	if err := db.Where("node_id = ?", nodeID).First(&node).Error; err != nil {
+		out["status"] = "node not found"
+		return out
+	}
+	resp, err := node.Get("log")
+	if err != nil {
+		out["lines"] = []any{}
+		return out
+	}
+	out["lines"] = resp["lines"]
 	return out
 }

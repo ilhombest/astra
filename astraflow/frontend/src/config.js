@@ -13,5 +13,5 @@ export const defaultConfig = {
 };
 
 
-export const urlsMenu = ["flow"];
+export const urlsMenu = ["flow", "sessions", "log"];
 export const urlsUser = ["profile", "exit"]
