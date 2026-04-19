@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Astra</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;color:#222;display:flex;height:100vh;overflow:hidden}
+
+/* Sidebar */
+#sidebar{width:220px;background:#1a2235;color:#c8d0e0;display:flex;flex-direction:column;flex-shrink:0}
+#sidebar .logo{padding:20px 16px 16px;font-size:20px;font-weight:700;color:#fff;border-bottom:1px solid #2a3550;letter-spacing:.5px}
+#sidebar .logo span{color:#4e8ef7}
+#sidebar nav a{display:flex;align-items:center;gap:10px;padding:11px 16px;color:#c8d0e0;text-decoration:none;font-size:14px;border-left:3px solid transparent;transition:.15s}
+#sidebar nav a:hover{background:#253045;color:#fff}
+#sidebar nav a.active{background:#253045;color:#fff;border-left-color:#4e8ef7}
+#sidebar nav a .ico{font-size:17px;width:20px;text-align:center}
+#sidebar .footer{margin-top:auto;padding:12px 16px;font-size:11px;color:#4a5570}
+
+/* Main */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#topbar{background:#fff;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;flex-shrink:0}
+#topbar h1{font-size:17px;font-weight:600}
+#topbar .actions{display:flex;gap:8px}
+#content{flex:1;overflow-y:auto;padding:24px}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;transition:.15s}
+.btn-primary{background:#4e8ef7;color:#fff}.btn-primary:hover{background:#3a7de8}
+.btn-success{background:#22c55e;color:#fff}.btn-success:hover{background:#16a34a}
+.btn-danger{background:#ef4444;color:#fff}.btn-danger:hover{background:#dc2626}
+.btn-secondary{background:#f3f4f6;color:#374151;border:1px solid #d1d5db}.btn-secondary:hover{background:#e5e7eb}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-icon{padding:5px 8px;background:transparent;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;font-size:14px;color:#555}.btn-icon:hover{background:#f3f4f6}
+
+/* Cards */
+.card{background:#fff;border-radius:10px;border:1px solid #e5e7eb;margin-bottom:20px}
+.card-head{padding:16px 20px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between}
+.card-head h2{font-size:15px;font-weight:600}
+.card-body{padding:20px}
+
+/* Stat cards */
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;margin-bottom:20px}
+.stat{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;text-align:center}
+.stat .val{font-size:28px;font-weight:700;color:#4e8ef7}
+.stat .lbl{font-size:12px;color:#888;margin-top:4px}
+.stat.green .val{color:#22c55e}
+.stat.red .val{color:#ef4444}
+.stat.orange .val{color:#f59e0b}
+
+/* Table */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#f8f9fa;padding:10px 12px;text-align:left;font-weight:600;color:#555;border-bottom:2px solid #e5e7eb}
+td{padding:10px 12px;border-bottom:1px solid #f0f2f5;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafbff}
+.empty{text-align:center;padding:40px;color:#999}
+
+/* Badge */
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-on{background:#dcfce7;color:#16a34a}
+.badge-off{background:#f3f4f6;color:#6b7280}
+.badge-error{background:#fee2e2;color:#dc2626}
+.badge-blue{background:#dbeafe;color:#1d4ed8}
+
+/* Form */
+.form-row{margin-bottom:14px}
+.form-row label{display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:5px}
+.form-row input,.form-row select,.form-row textarea{width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;outline:none;transition:.15s}
+.form-row input:focus,.form-row select:focus,.form-row textarea:focus{border-color:#4e8ef7;box-shadow:0 0 0 3px rgba(78,142,247,.15)}
+.form-row textarea{resize:vertical;min-height:80px;font-family:monospace}
+.form-row .hint{font-size:11px;color:#9ca3af;margin-top:3px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.form-check{display:flex;align-items:center;gap:8px;font-size:13px}
+.form-check input{width:auto}
+
+/* Modal */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:100;align-items:center;justify-content:center}
+#overlay.show{display:flex}
+#modal{background:#fff;border-radius:12px;width:500px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+#modal-head{padding:18px 20px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between}
+#modal-head h3{font-size:16px;font-weight:600}
+#modal-body{padding:20px;overflow-y:auto}
+#modal-foot{padding:14px 20px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:8px}
+#modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#888;line-height:1}
+
+/* Toast */
+#toast{position:fixed;bottom:20px;right:20px;padding:12px 18px;border-radius:8px;font-size:13px;font-weight:500;color:#fff;display:none;z-index:999;transition:.3s}
+#toast.show{display:block}
+#toast.ok{background:#22c55e}
+#toast.err{background:#ef4444}
+
+/* Adapter type tabs */
+.type-group{display:flex;gap:4px;flex-wrap:wrap}
+.type-btn{padding:4px 10px;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;font-size:12px;background:#f9f9f9}
+.type-btn.sel{background:#4e8ef7;color:#fff;border-color:#4e8ef7}
+
+/* Log */
+#log-box{background:#111;color:#ddd;font-family:monospace;font-size:12px;padding:12px;border-radius:8px;height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+.log-error{color:#f87171}
+.log-warn{color:#fbbf24}
+.log-info{color:#6ee7b7}
+
+/* Sections */
+.section{display:none}
+.section.active{display:block}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div id="sidebar">
+  <div class="logo">⚡ <span>Astra</span></div>
+  <nav>
+    <a href="#" class="active" data-tab="dashboard"><span class="ico">📊</span> Dashboard</a>
+    <a href="#" data-tab="streams"><span class="ico">📺</span> Streams</a>
+    <a href="#" data-tab="adapters"><span class="ico">📡</span> Adapters</a>
+    <a href="#" data-tab="newcamd"><span class="ico">🔐</span> NewCamd</a>
+    <a href="#" data-tab="log"><span class="ico">📋</span> Log</a>
+  </nav>
+  <div class="footer">astra-api</div>
+</div>
+
+<!-- Main -->
+<div id="main">
+  <div id="topbar">
+    <h1 id="page-title">Dashboard</h1>
+    <div class="actions">
+      <button class="btn btn-danger btn-sm" id="btn-restart" onclick="restartAstra()">↺ Restart Astra</button>
+    </div>
+  </div>
+  <div id="content">
+
+    <!-- Dashboard -->
+    <div class="section active" id="tab-dashboard">
+      <div class="stats" id="stat-cards">
+        <div class="stat" id="s-status"><div class="val">…</div><div class="lbl">Astra Status</div></div>
+        <div class="stat" id="s-cpu"><div class="val">…</div><div class="lbl">CPU</div></div>
+        <div class="stat" id="s-mem"><div class="val">…</div><div class="lbl">Memory</div></div>
+        <div class="stat" id="s-uptime"><div class="val">…</div><div class="lbl">Uptime</div></div>
+        <div class="stat" id="s-streams"><div class="val">…</div><div class="lbl">Streams</div></div>
+        <div class="stat" id="s-adapters"><div class="val">…</div><div class="lbl">Adapters</div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Streams</h2></div>
+        <div class="card-body" style="padding:0">
+          <table>
+            <thead><tr><th>Name</th><th>ID</th><th>Enable</th><th>Inputs</th><th>Outputs</th></tr></thead>
+            <tbody id="dash-streams"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Streams -->
+    <div class="section" id="tab-streams">
+      <div class="card">
+        <div class="card-head">
+          <h2>Streams</h2>
+          <button class="btn btn-primary btn-sm" onclick="openStreamModal()">+ Add Stream</button>
+        </div>
+        <div class="card-body" style="padding:0">
+          <table>
+            <thead><tr><th>Name</th><th>ID</th><th>Type</th><th>Enable</th><th>Inputs</th><th>Outputs</th><th width="90">Actions</th></tr></thead>
+            <tbody id="streams-tbody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Adapters -->
+    <div class="section" id="tab-adapters">
+      <div class="card">
+        <div class="card-head">
+          <h2>DVB Adapters</h2>
+          <button class="btn btn-primary btn-sm" onclick="openAdapterModal()">+ Add Adapter</button>
+        </div>
+        <div class="card-body" style="padding:0">
+          <table>
+            <thead><tr><th>Adapter</th><th>Type</th><th>Frequency</th><th>Pol/BW</th><th>Symbol Rate</th><th>Enabled</th><th width="90">Actions</th></tr></thead>
+            <tbody id="adapters-tbody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- NewCamd -->
+    <div class="section" id="tab-newcamd">
+      <div class="card">
+        <div class="card-head">
+          <h2>NewCamd Servers</h2>
+          <button class="btn btn-primary btn-sm" onclick="openCamModal()">+ Add Server</button>
+        </div>
+        <div class="card-body" style="padding:0">
+          <table>
+            <thead><tr><th>Name</th><th>Host</th><th>Port</th><th>Username</th><th width="90">Actions</th></tr></thead>
+            <tbody id="cams-tbody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="section" id="tab-log">
+      <div class="card">
+        <div class="card-head">
+          <h2>Astra Log</h2>
+          <button class="btn btn-secondary btn-sm" onclick="loadLog()">↺ Refresh</button>
+        </div>
+        <div class="card-body" style="padding:12px">
+          <div id="log-box">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="overlay">
+  <div id="modal">
+    <div id="modal-head">
+      <h3 id="modal-title">Edit</h3>
+      <button id="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal-body"></div>
+    <div id="modal-foot">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="modal-save" onclick="modalSave()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let currentTab = 'dashboard';
+let modalCallback = null;
+let autoRefresh = null;
+
+// ── Navigation ─────────────────────────────────────────────────────────────
+document.querySelectorAll('#sidebar nav a').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    switchTab(a.dataset.tab);
+  });
+});
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('#sidebar nav a').forEach(a =>
+    a.classList.toggle('active', a.dataset.tab === tab));
+  document.querySelectorAll('.section').forEach(s =>
+    s.classList.toggle('active', s.id === 'tab-' + tab));
+  document.getElementById('page-title').textContent =
+    {dashboard:'Dashboard',streams:'Streams',adapters:'Adapters',newcamd:'NewCamd',log:'Log'}[tab] || tab;
+  clearInterval(autoRefresh);
+  if (tab === 'dashboard') { loadDashboard(); autoRefresh = setInterval(loadDashboard, 5000); }
+  else if (tab === 'streams') loadStreams();
+  else if (tab === 'adapters') loadAdapters();
+  else if (tab === 'newcamd') loadCams();
+  else if (tab === 'log') loadLog();
+}
+
+// ── API helpers ────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch('/api/' + path, opts);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+function str(v, def='') { return v == null ? def : String(v); }
+function num(v, def=0)  { const n = parseFloat(v); return isNaN(n) ? def : n; }
+function bool(v)        { return v === true || v === '1' || v === 'true'; }
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+let toastTm;
+function toast(msg, isErr=false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + (isErr ? 'err' : 'ok');
+  clearTimeout(toastTm);
+  toastTm = setTimeout(() => el.className = '', 3000);
+}
+
+// ── Modal ──────────────────────────────────────────────────────────────────
+function openModal(title, html, onSave) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('overlay').classList.add('show');
+  modalCallback = onSave;
+}
+function closeModal() {
+  document.getElementById('overlay').classList.remove('show');
+  modalCallback = null;
+}
+async function modalSave() {
+  if (modalCallback) {
+    try { await modalCallback(); closeModal(); }
+    catch(e) { toast(e.message, true); }
+  }
+}
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay')) closeModal();
+});
+
+// ── Dashboard ──────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const [sys, streams, adapters] = await Promise.all([
+      api('GET','system-status'),
+      api('GET','streams'),
+      api('GET','adapters'),
+    ]);
+    const uptime = (sys.app_uptime || 0);
+    const h = Math.floor(uptime / 60), m = uptime % 60;
+    const isOnline = uptime > 0;
+
+    const s = id => document.getElementById(id);
+    s('s-status').querySelector('.val').textContent = isOnline ? '●' : '●';
+    s('s-status').querySelector('.val').style.color = isOnline ? '#22c55e' : '#ef4444';
+    s('s-status').querySelector('.lbl').textContent = isOnline ? 'Online' : 'Offline';
+    s('s-cpu').querySelector('.val').textContent = (sys.app_cpu_usage || '0') + '%';
+    s('s-mem').querySelector('.val').textContent = Math.round((sys.app_mem_kb||0)/1024) + ' MB';
+    s('s-uptime').querySelector('.val').textContent = h + 'h ' + String(m).padStart(2,'0') + 'm';
+    s('s-streams').querySelector('.val').textContent = streams.length || 0;
+    s('s-adapters').querySelector('.val').textContent = adapters.length || 0;
+
+    const tbody = document.getElementById('dash-streams');
+    if (!streams.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No streams configured</td></tr>';
+    } else {
+      tbody.innerHTML = streams.map(s => `
+        <tr>
+          <td><b>${esc(s.name||'')}</b></td>
+          <td style="color:#888;font-size:12px">${esc(s._id||s.id||'')}</td>
+          <td>${badge(bool(s.enable))}</td>
+          <td>${arrLen(s.input)}</td>
+          <td>${arrLen(s.output)}</td>
+        </tr>`).join('');
+    }
+  } catch(e) { console.error(e); }
+}
+
+// ── Streams ────────────────────────────────────────────────────────────────
+async function loadStreams() {
+  try {
+    const list = await api('GET','streams');
+    const tbody = document.getElementById('streams-tbody');
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No streams — click Add Stream</td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.map(s => `
+      <tr>
+        <td><b>${esc(s.name||'')}</b></td>
+        <td style="color:#888;font-size:11px">${esc(s._id||s.id||'')}</td>
+        <td><span class="badge badge-blue">${esc(s.type||'spts')}</span></td>
+        <td>${badge(bool(s.enable))}</td>
+        <td>${arrLen(s.input)}</td>
+        <td>${arrLen(s.output)}</td>
+        <td>
+          <button class="btn-icon" title="Edit" onclick='openStreamModal(${JSON.stringify(s)})'>✏️</button>
+          <button class="btn-icon" title="Delete" onclick="deleteStream('${esc(s._id||s.id||'')}')">🗑️</button>
+        </td>
+      </tr>`).join('');
+  } catch(e) { toast(e.message,true); }
+}
+
+function openStreamModal(s={}) {
+  const id = s._id || s.id || '';
+  const isEdit = !!id;
+  const inputs  = (s.input  || []).join('\n');
+  const outputs = (s.output || []).join('\n');
+  const html = `
+    <div class="form-row"><label>Name *</label><input id="f-name" value="${esc(s.name||'')}"></div>
+    <div class="form-row form-check"><input type="checkbox" id="f-enable" ${bool(s.enable)!==false?'checked':''}><label for="f-enable">Enabled</label></div>
+    <div class="form-row"><label>Type</label>
+      <select id="f-type">
+        <option value="spts" ${s.type==='spts'?'selected':''}>SPTS</option>
+        <option value="mpts" ${s.type==='mpts'?'selected':''}>MPTS</option>
+      </select>
+    </div>
+    <div class="form-row"><label>Input URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
+      <textarea id="f-input" rows="3">${esc(inputs)}</textarea></div>
+    <div class="form-row"><label>Output URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
+      <textarea id="f-output" rows="3">${esc(outputs)}</textarea></div>
+    <div class="form-row"><label>BISS Key <span style="font-weight:400;color:#9ca3af">(16 or 32 hex chars, optional)</span></label>
+      <input id="f-biss" value="${esc(s.biss||'')}" placeholder="e.g. 1122334455667700"></div>
+  `;
+  openModal(isEdit ? 'Edit Stream' : 'Add Stream', html, async () => {
+    const name = document.getElementById('f-name').value.trim();
+    if (!name) throw new Error('Name is required');
+    const body = {
+      name,
+      enable: document.getElementById('f-enable').checked,
+      type:   document.getElementById('f-type').value,
+      input:  splitLines(document.getElementById('f-input').value),
+      output: splitLines(document.getElementById('f-output').value),
+    };
+    const biss = document.getElementById('f-biss').value.trim();
+    if (biss) body.biss = biss;
+    if (isEdit) { await api('PUT','streams/'+id, body); toast('Stream updated'); }
+    else        { await api('POST','streams', body);    toast('Stream created'); }
+    loadStreams();
+  });
+}
+
+async function deleteStream(id) {
+  if (!confirm('Delete this stream?')) return;
+  try { await api('DELETE','streams/'+id); toast('Deleted'); loadStreams(); }
+  catch(e) { toast(e.message,true); }
+}
+
+// ── Adapters ───────────────────────────────────────────────────────────────
+async function loadAdapters() {
+  try {
+    const list = await api('GET','adapters');
+    const tbody = document.getElementById('adapters-tbody');
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No adapters — click Add Adapter</td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.map(a => {
+      const isSat = /S2?$/.test(a.dvb_type||'S2');
+      const pol   = isSat ? esc(str(a.polarization)) : '';
+      const bw    = !isSat ? esc(str(a.bandwidth))+'MHz' : '';
+      const sr    = isSat ? num(a.symbolrate).toLocaleString() : '';
+      return `<tr>
+        <td>adapter<b>${str(a.adapter,'?')}</b>${a.device?'/dev'+a.device:''}</td>
+        <td><span class="badge badge-blue">${esc(a.dvb_type||'DVB-S2')}</span></td>
+        <td>${num(a.frequency).toLocaleString()} kHz</td>
+        <td>${pol||bw||'—'}</td>
+        <td>${sr ? sr+' kBd' : '—'}</td>
+        <td>${badge(bool(a.enabled)!==false)}</td>
+        <td>
+          <button class="btn-icon" title="Edit" onclick='openAdapterModal(${JSON.stringify(a)})'>✏️</button>
+          <button class="btn-icon" title="Delete" onclick="deleteAdapter('${esc(a._id||'')}')">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) { toast(e.message,true); }
+}
+
+function openAdapterModal(a={}) {
+  const id    = a._id || '';
+  const isEdit = !!id;
+  const type  = a.dvb_type || 'DVB-S2';
+
+  const html = `
+    <div class="form-grid">
+      <div class="form-row"><label>Adapter #</label><input id="f-adapter" type="number" min="0" value="${str(a.adapter,'0')}"></div>
+      <div class="form-row"><label>Device #</label><input id="f-device" type="number" min="0" value="${str(a.device,'0')}"></div>
+    </div>
+    <div class="form-row"><label>DVB Type</label>
+      <select id="f-dvbtype" onchange="adapterTypeChange()">
+        ${['DVB-S','DVB-S2','DVB-T','DVB-T2','DVB-C','DVB-C2','ATSC'].map(t =>
+          `<option value="${t}" ${type===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-row"><label>Frequency (kHz)</label><input id="f-freq" type="number" value="${str(a.frequency,'0')}"></div>
+    <div id="sat-fields">
+      <div class="form-grid">
+        <div class="form-row"><label>Polarization</label>
+          <select id="f-pol">
+            ${['H','V','L','R'].map(p=>`<option value="${p}" ${(a.polarization||'H')===p?'selected':''}>${p}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-row"><label>Symbol Rate (kBd)</label><input id="f-sr" type="number" value="${str(a.symbolrate,'0')}"></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-row"><label>LOF1 (kHz)</label><input id="f-lof1" type="number" value="${str(a.lof1,'9750')}"></div>
+        <div class="form-row"><label>LOF2 (kHz)</label><input id="f-lof2" type="number" value="${str(a.lof2,'10600')}"></div>
+      </div>
+      <div class="form-row"><label>SLOF (kHz)</label><input id="f-slof" type="number" value="${str(a.slof,'11700')}"></div>
+    </div>
+    <div id="ter-fields" style="display:none">
+      <div class="form-row"><label>Bandwidth (MHz)</label>
+        <select id="f-bw">
+          ${[6,7,8].map(b=>`<option value="${b}" ${num(a.bandwidth,8)===b?'selected':''}>${b}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row form-check"><input type="checkbox" id="f-enabled" ${bool(a.enabled)!==false?'checked':''}><label for="f-enabled">Enabled</label></div>
+  `;
+  openModal(isEdit ? 'Edit Adapter' : 'Add Adapter', html, async () => {
+    const dvbType = document.getElementById('f-dvbtype').value;
+    const isSat   = dvbType === 'DVB-S' || dvbType === 'DVB-S2';
+    const isTer   = dvbType === 'DVB-T' || dvbType === 'DVB-T2' || dvbType === 'ATSC';
+    const body = {
+      dvb_type:  dvbType,
+      adapter:   num(document.getElementById('f-adapter').value),
+      device:    num(document.getElementById('f-device').value),
+      frequency: num(document.getElementById('f-freq').value),
+      enabled:   document.getElementById('f-enabled').checked,
+    };
+    if (isSat) {
+      body.polarization = document.getElementById('f-pol').value;
+      body.symbolrate   = num(document.getElementById('f-sr').value);
+      body.lof1         = num(document.getElementById('f-lof1').value);
+      body.lof2         = num(document.getElementById('f-lof2').value);
+      body.slof         = num(document.getElementById('f-slof').value);
+    } else if (isTer) {
+      body.bandwidth    = num(document.getElementById('f-bw').value);
+    } else {
+      body.symbolrate   = num(document.getElementById('f-sr').value);
+    }
+    if (isEdit) { await api('PUT','adapters/'+id, body); toast('Adapter updated'); }
+    else        { await api('POST','adapters', body);    toast('Adapter created'); }
+    loadAdapters();
+  });
+  setTimeout(adapterTypeChange, 10);
+}
+
+function adapterTypeChange() {
+  const t = document.getElementById('f-dvbtype').value;
+  const isSat = t === 'DVB-S' || t === 'DVB-S2';
+  const isTer = t === 'DVB-T' || t === 'DVB-T2' || t === 'ATSC';
+  document.getElementById('sat-fields').style.display = isSat ? '' : 'none';
+  document.getElementById('ter-fields').style.display = isTer ? '' : 'none';
+}
+
+async function deleteAdapter(id) {
+  if (!confirm('Delete this adapter?')) return;
+  try { await api('DELETE','adapters/'+id); toast('Deleted'); loadAdapters(); }
+  catch(e) { toast(e.message,true); }
+}
+
+// ── NewCamd ────────────────────────────────────────────────────────────────
+async function loadCams() {
+  try {
+    const list = await api('GET','cams');
+    const tbody = document.getElementById('cams-tbody');
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No NewCamd servers — click Add Server</td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.map(c => `
+      <tr>
+        <td><b>${esc(c.name||c._id||'')}</b></td>
+        <td>${esc(c.host||'')}</td>
+        <td>${esc(str(c.port,'2222'))}</td>
+        <td>${esc(c.user||'')}</td>
+        <td>
+          <button class="btn-icon" title="Edit" onclick='openCamModal(${JSON.stringify(c)})'>✏️</button>
+          <button class="btn-icon" title="Delete" onclick="deleteCam('${esc(c._id||'')}')">🗑️</button>
+        </td>
+      </tr>`).join('');
+  } catch(e) { toast(e.message,true); }
+}
+
+function openCamModal(c={}) {
+  const id     = c._id || '';
+  const isEdit = !!id;
+  const html = `
+    <div class="form-row"><label>Name</label><input id="f-name" value="${esc(c.name||'')}"></div>
+    <div class="form-grid">
+      <div class="form-row"><label>Host</label><input id="f-host" value="${esc(c.host||'')}"></div>
+      <div class="form-row"><label>Port</label><input id="f-port" type="number" value="${str(c.port,'2222')}"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Username</label><input id="f-user" value="${esc(c.user||'')}"></div>
+      <div class="form-row"><label>Password</label><input id="f-pass" type="password" value="${esc(c.pass||'')}"></div>
+    </div>
+    <div class="form-row">
+      <label>DES Key <span style="font-weight:400;color:#9ca3af">(28 hex chars = 14 bytes)</span></label>
+      <input id="f-key" value="${esc(c.key||'')}" placeholder="0102030405060708091011121314" maxlength="28">
+      <div class="hint">Example: 0102030405060708091011121314</div>
+    </div>
+  `;
+  openModal(isEdit ? 'Edit NewCamd Server' : 'Add NewCamd Server', html, async () => {
+    const host = document.getElementById('f-host').value.trim();
+    if (!host) throw new Error('Host is required');
+    const key = document.getElementById('f-key').value.trim();
+    if (key && !/^[0-9a-fA-F]{28}$/.test(key)) throw new Error('DES key must be 28 hex characters');
+    const body = {
+      name: document.getElementById('f-name').value.trim() || host,
+      host,
+      port: num(document.getElementById('f-port').value, 2222),
+      user: document.getElementById('f-user').value.trim(),
+      pass: document.getElementById('f-pass').value,
+      key:  key || '0102030405060708091011121314',
+    };
+    if (isEdit) { await api('PUT','cams/'+id, body); toast('Server updated'); }
+    else        { await api('POST','cams', body);    toast('Server created'); }
+    loadCams();
+  });
+}
+
+async function deleteCam(id) {
+  if (!confirm('Delete this NewCamd server?')) return;
+  try { await api('DELETE','cams/'+id); toast('Deleted'); loadCams(); }
+  catch(e) { toast(e.message,true); }
+}
+
+// ── Log ────────────────────────────────────────────────────────────────────
+async function loadLog() {
+  try {
+    const data = await api('GET','log');
+    const box  = document.getElementById('log-box');
+    if (!data.lines || !data.lines.length) { box.textContent = 'No log entries'; return; }
+    box.innerHTML = data.lines.map(l => {
+      const cls = l.level==='error'?'log-error':l.level==='warning'?'log-warn':'log-info';
+      return `<span class="${cls}">[${esc(l.time)}] ${esc(l.msg)}</span>`;
+    }).join('\n');
+    box.scrollTop = box.scrollHeight;
+  } catch(e) { document.getElementById('log-box').textContent = 'Error loading log'; }
+}
+
+// ── Restart ────────────────────────────────────────────────────────────────
+async function restartAstra() {
+  if (!confirm('Restart Astra?')) return;
+  try {
+    await fetch('/control/', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({cmd:'restart'})
+    });
+    toast('Astra restarting…');
+  } catch(e) { toast(e.message,true); }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function badge(on) { return on ? '<span class="badge badge-on">ON</span>' : '<span class="badge badge-off">OFF</span>'; }
+function arrLen(v) { return Array.isArray(v) ? v.length : (v?1:0); }
+function splitLines(s) { return s.split('\n').map(l=>l.trim()).filter(Boolean); }
+
+// ── Init ───────────────────────────────────────────────────────────────────
+switchTab('dashboard');
+</script>
+</body>
+</html>
