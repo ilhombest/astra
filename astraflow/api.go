@@ -67,6 +67,7 @@ var apiRoutes = map[string]APIFn{
 	"saveNewcamd":   apiSaveNewcamd,
 	"deleteNewcamd": apiDeleteNewcamd,
 	// astra
+	"deployToAstra":     apiDeployToAstra,
 	"restartNode":       apiRestartNode,
 	"getAstraConfig":    apiGetAstraConfig,
 	"sendConfigToAstra": apiSendConfigToAstra,

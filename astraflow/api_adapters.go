@@ -87,6 +87,11 @@ func apiSaveAdapter(ctx *ApiCtx) map[string]any {
 		}
 		out["row"] = row
 	}
+
+	var node ClusterNode
+	if db.Where("node_id = ?", nodeID).First(&node).Error == nil {
+		go deployNodeToAstra(node)
+	}
 	return out
 }
 
@@ -97,9 +102,19 @@ func apiDeleteAdapter(ctx *ApiCtx) map[string]any {
 		out["status"] = "id required"
 		return out
 	}
+	var adapter ClusterAdapter
+	if err := db.First(&adapter, id).Error; err != nil {
+		out["status"] = "adapter not found"
+		return out
+	}
+	nodeID := adapter.NodeID
 	if err := db.Delete(&ClusterAdapter{}, id).Error; err != nil {
 		out["status"] = err.Error()
 		return out
+	}
+	var node ClusterNode
+	if db.Where("node_id = ?", nodeID).First(&node).Error == nil {
+		go deployNodeToAstra(node)
 	}
 	return out
 }
