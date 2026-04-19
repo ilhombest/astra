@@ -21,6 +21,7 @@ import InputEditDialog from "./InputEditDialog";
 import { useToast } from "utils/useToast";
 import ContextMenu from "./ContextMenu";
 import StreamInfo from "./StreamInfo";
+import AdaptersDialog from "./AdaptersDialog";
 import { getRedux } from "utils/redux";
 
 
@@ -44,6 +45,7 @@ export default function WorkArea() {
     const [pendingEdge, setPendingEdge] = useState(null);
     const [streamInfo, setStreamInfo] = useState(null);
     const [streamInfoPos, setStreamInfoPos] = useState(null);
+    const [adaptersOpen, setAdaptersOpen] = useState(false);
     
     const isReadOnly = String(getRedux("user.status")) !== "1";
 
@@ -413,6 +415,14 @@ export default function WorkArea() {
                 onClose={handleCloseMenu}
                 onAddInput={handleAddInput}
                 onRefreshConfig={handleRefreshConfig}
+                onAdapters={() => setAdaptersOpen(true)}
+            />
+
+            <AdaptersDialog
+                open={adaptersOpen}
+                onClose={() => setAdaptersOpen(false)}
+                nodeId={menuNode?.id}
+                nodeName={menuNode?.data?.label || menuNode?.id}
             />
 
             {streamInfo && (

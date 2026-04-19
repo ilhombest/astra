@@ -81,6 +81,9 @@ type ClusterStream struct {
 	Enable    bool      `gorm:"default:true" json:"enable"`
 	Type      string    `gorm:"size:20;default:'spts'" json:"type"`
 	AstraID   string    `gorm:"size:50;index" json:"astra_id"`
+	// CA / Softcam
+	BissMode  int    `gorm:"default:0" json:"biss_mode"` // 0=none 1=BISS-1 2=BISS-E
+	BissKey   string `gorm:"size:32" json:"biss_key"`    // 16 or 32 hex chars
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -96,6 +99,54 @@ type User struct {
 	LastUA     string    `gorm:"type:text" json:"last_ua"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type ClusterAdapter struct {
+	ID      uint   `gorm:"primaryKey" json:"id"`
+	NodeID  string `gorm:"size:36;index" json:"node_id"`
+	Name    string `gorm:"size:100" json:"name"`
+	Adapter int    `gorm:"default:0" json:"adapter"`
+	Device  int    `gorm:"default:0" json:"device"`
+	DvbType string `gorm:"size:20;default:'DVB-S2'" json:"dvb_type"`
+	MAC     string `gorm:"size:20" json:"mac"`
+	Enabled bool   `gorm:"default:true" json:"enabled"`
+
+	// DVB-S / DVB-S2
+	Frequency    int    `gorm:"default:0" json:"frequency"`    // MHz × 1000, e.g. 11000
+	Polarization string `gorm:"size:2" json:"polarization"`    // H V L R
+	Symbolrate   int    `gorm:"default:0" json:"symbolrate"`   // kBaud, e.g. 27500
+	Lof1         int    `gorm:"default:9750" json:"lof1"`      // kHz
+	Lof2         int    `gorm:"default:10600" json:"lof2"`     // kHz
+	Slof         int    `gorm:"default:11700" json:"slof"`     // kHz
+
+	// DVB-T / DVB-T2
+	Bandwidth int `gorm:"default:8" json:"bandwidth"` // MHz: 6 7 8
+
+	// DVB-C
+	Modulation string `gorm:"size:20;default:'QAM256'" json:"modulation"` // QAM64 QAM128 QAM256
+
+	// Advanced (all types)
+	BudgetMode   bool `gorm:"default:false" json:"budget_mode"`
+	CaDelay      int  `gorm:"default:0" json:"ca_delay"`
+	ErrorTimeout int  `gorm:"default:120" json:"error_timeout"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type NewcamdServer struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	NodeID    string    `gorm:"size:36;index" json:"node_id"`
+	Name      string    `gorm:"size:100" json:"name"`
+	Host      string    `gorm:"size:255" json:"host"`
+	Port      int       `gorm:"default:2222" json:"port"`
+	Username  string    `gorm:"size:100" json:"username"`
+	Password  string    `gorm:"size:100" json:"password"`
+	// 14 bytes DES key in hex, 28 chars
+	DESKey    string    `gorm:"size:56" json:"des_key"`
+	Enabled   bool      `gorm:"default:true" json:"enabled"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type UserRefreshToken struct {
@@ -163,6 +214,8 @@ func initDB() bool {
 		&ClusterEdge{},
 		&ClusterPort{},
 		&ClusterStream{},
+		&ClusterAdapter{},
+		&NewcamdServer{},
 		&User{},
 		&UserRefreshToken{},
 	); err != nil {

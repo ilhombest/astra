@@ -50,6 +50,22 @@ var apiRoutes = map[string]APIFn{
 	"getSettings":    apiGetSettings,
 	"saveSetting":    apiSaveSetting,
 	"restartProgram": apiRestartProgram,
+	// dashboard
+	"getDashboardData":  apiGetDashboardData,
+	"getStreamStatus":   apiGetStreamStatus,
+	"getAdapterStatus":  apiGetAdapterStatus,
+	"getAllSessions":     apiGetAllSessions,
+	"getNodeLog":        apiGetNodeLog,
+	// adapters
+	"getAdapters":    apiGetAdapters,
+	"saveAdapter":    apiSaveAdapter,
+	"deleteAdapter":  apiDeleteAdapter,
+	// softcam / CA
+	"getSoftcam":    apiGetSoftcam,
+	"saveSoftcam":   apiSaveSoftcam,
+	"getNewcamd":    apiGetNewcamd,
+	"saveNewcamd":   apiSaveNewcamd,
+	"deleteNewcamd": apiDeleteNewcamd,
 	// astra
 	"restartNode":       apiRestartNode,
 	"getAstraConfig":    apiGetAstraConfig,
