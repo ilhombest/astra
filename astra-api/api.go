@@ -264,33 +264,37 @@ func handleAdapterStatus(w http.ResponseWriter, _ *http.Request, adapter, device
 }
 
 // readDVBStatus reads signal stats via DVB ioctl API from /dev/dvb/adapterN/frontendN.
+// Ioctl numbers: _IOR('o', N, size) = (2<<30)|(size<<16)|('o'<<8)|N
+const (
+	feReadStatus         = 0x80046F45 // _IOR('o',69,uint32)  FE_READ_STATUS
+	feReadBER            = 0x80046F46 // _IOR('o',70,uint32)  FE_READ_BER
+	feReadSignalStrength = 0x80026F47 // _IOR('o',71,uint16)  FE_READ_SIGNAL_STRENGTH
+	feReadSNR            = 0x80026F48 // _IOR('o',72,uint16)  FE_READ_SNR
+)
+
 func readDVBStatus(adapter, device int) (lock bool, signal, snr, ber int) {
 	path := fmt.Sprintf("/dev/dvb/adapter%d/frontend%d", adapter, device)
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	f, err := os.OpenFile(path, os.O_RDWR|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return
 	}
 	defer f.Close()
 	fd := f.Fd()
 
-	// FE_READ_STATUS
 	var st uint32
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, 0x6f01, uintptr(unsafe.Pointer(&st))); e == 0 {
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, feReadStatus, uintptr(unsafe.Pointer(&st))); e == 0 {
 		lock = (st & 0x10) != 0 // FE_HAS_LOCK
 	}
-	// FE_READ_SIGNAL_STRENGTH
 	var sig uint16
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, 0x6f03, uintptr(unsafe.Pointer(&sig))); e == 0 {
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, feReadSignalStrength, uintptr(unsafe.Pointer(&sig))); e == 0 {
 		signal = int(sig) * 100 / 65535
 	}
-	// FE_READ_SNR
 	var snrVal uint16
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, 0x6f04, uintptr(unsafe.Pointer(&snrVal))); e == 0 {
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, feReadSNR, uintptr(unsafe.Pointer(&snrVal))); e == 0 {
 		snr = int(snrVal) * 100 / 65535
 	}
-	// FE_READ_BER
 	var berVal uint32
-	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, 0x6f02, uintptr(unsafe.Pointer(&berVal))); e == 0 {
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, feReadBER, uintptr(unsafe.Pointer(&berVal))); e == 0 {
 		ber = int(berVal)
 	}
 	return
