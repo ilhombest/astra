@@ -53,31 +53,37 @@ export default function AdaptersDialog({ open, onClose, nodeId, nodeName }) {
                                     <TableCell>Name</TableCell>
                                     <TableCell>Adapter / Device</TableCell>
                                     <TableCell>Type</TableCell>
-                                    <TableCell>MAC</TableCell>
+                                    <TableCell>Tuning</TableCell>
                                     <TableCell>Status</TableCell>
                                     <TableCell align="right" />
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {rows.map(row => (
+                                {rows.map(row => {
+                                    const sat  = row.dvb_type === "DVB-S"  || row.dvb_type === "DVB-S2";
+                                    const terr = row.dvb_type === "DVB-T"  || row.dvb_type === "DVB-T2";
+                                    const cab  = row.dvb_type === "DVB-C"  || row.dvb_type === "DVB-C2";
+                                    const tuning = sat
+                                        ? `${row.frequency} MHz ${row.polarization || ""} ${row.symbolrate ? row.symbolrate + " kBd" : ""}`
+                                        : terr
+                                        ? `${row.frequency} MHz / ${row.bandwidth} MHz BW`
+                                        : cab
+                                        ? `${row.frequency} MHz ${row.modulation || ""}`
+                                        : "—";
+                                    return (
                                     <TableRow key={row.id} hover>
                                         <TableCell>{row.name || "—"}</TableCell>
-                                        <TableCell>
-                                            {row.adapter} / {row.device}
-                                        </TableCell>
+                                        <TableCell>{row.adapter} / {row.device}</TableCell>
                                         <TableCell>
                                             <Chip label={row.dvb_type} size="small"
                                                 color="primary" variant="outlined" />
                                         </TableCell>
-                                        <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
-                                            {row.mac || "—"}
+                                        <TableCell sx={{ fontSize: 12, color: "text.secondary" }}>
+                                            {tuning}
                                         </TableCell>
                                         <TableCell>
-                                            <Chip
-                                                label={row.enabled ? "on" : "off"}
-                                                size="small"
-                                                color={row.enabled ? "success" : "default"}
-                                            />
+                                            <Chip label={row.enabled ? "on" : "off"} size="small"
+                                                color={row.enabled ? "success" : "default"} />
                                         </TableCell>
                                         <TableCell align="right">
                                             <IconButton size="small" onClick={() => handleEdit(row)}>
@@ -85,7 +91,8 @@ export default function AdaptersDialog({ open, onClose, nodeId, nodeName }) {
                                             </IconButton>
                                         </TableCell>
                                     </TableRow>
-                                ))}
+                                    );
+                                })}
                             </TableBody>
                         </Table>
                     )}

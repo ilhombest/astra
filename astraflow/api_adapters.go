@@ -31,15 +31,33 @@ func apiSaveAdapter(ctx *ApiCtx) map[string]any {
 	}
 
 	id := toUint(d["id"])
-	name := strings.TrimSpace(d["name"])
-	dvbType := strings.TrimSpace(d["dvb_type"])
-	mac := strings.TrimSpace(d["mac"])
-	adapter := int(toInt(d["adapter"]))
-	device := int(toInt(d["device"]))
-	enabled := d["enabled"] == "1"
 
-	if dvbType == "" {
-		dvbType = "DVB-S2"
+	fill := func(row *ClusterAdapter) {
+		row.Name         = strings.TrimSpace(d["name"])
+		row.DvbType      = strings.TrimSpace(d["dvb_type"])
+		row.MAC          = strings.TrimSpace(d["mac"])
+		row.Adapter      = int(toInt(d["adapter"]))
+		row.Device       = int(toInt(d["device"]))
+		row.Enabled      = d["enabled"] == "1"
+		// tuning
+		row.Frequency    = int(toInt(d["frequency"]))
+		row.Polarization = strings.TrimSpace(d["polarization"])
+		row.Symbolrate   = int(toInt(d["symbolrate"]))
+		row.Lof1         = int(toInt(d["lof1"]))
+		row.Lof2         = int(toInt(d["lof2"]))
+		row.Slof         = int(toInt(d["slof"]))
+		row.Bandwidth    = int(toInt(d["bandwidth"]))
+		row.Modulation   = strings.TrimSpace(d["modulation"])
+		// advanced
+		row.BudgetMode   = d["budget_mode"] == "1"
+		row.CaDelay      = int(toInt(d["ca_delay"]))
+		row.ErrorTimeout = int(toInt(d["error_timeout"]))
+		if row.DvbType == "" {
+			row.DvbType = "DVB-S2"
+		}
+		if row.ErrorTimeout == 0 {
+			row.ErrorTimeout = 120
+		}
 	}
 
 	if id > 0 {
@@ -48,27 +66,21 @@ func apiSaveAdapter(ctx *ApiCtx) map[string]any {
 			out["status"] = "Adapter not found"
 			return out
 		}
-		row.Name = name
-		row.DvbType = dvbType
-		row.MAC = mac
-		row.Adapter = adapter
-		row.Device = device
-		row.Enabled = enabled
+		fill(&row)
 		if err := db.Save(&row).Error; err != nil {
 			out["status"] = err.Error()
 			return out
 		}
 		out["row"] = row
 	} else {
-		row := ClusterAdapter{
-			NodeID:  nodeID,
-			Name:    name,
-			DvbType: dvbType,
-			MAC:     mac,
-			Adapter: adapter,
-			Device:  device,
-			Enabled: enabled,
-		}
+		row := ClusterAdapter{NodeID: nodeID}
+		fill(&row)
+		if row.Lof1 == 0 { row.Lof1 = 9750 }
+		if row.Lof2 == 0 { row.Lof2 = 10600 }
+		if row.Slof == 0 { row.Slof = 11700 }
+		if row.Bandwidth == 0 { row.Bandwidth = 8 }
+		if row.Modulation == "" { row.Modulation = "QAM256" }
+		if row.Polarization == "" { row.Polarization = "H" }
 		if err := db.Create(&row).Error; err != nil {
 			out["status"] = err.Error()
 			return out
