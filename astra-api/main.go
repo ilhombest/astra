@@ -1,10 +1,12 @@
 package main
 
 import (
+	_ "embed"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
-	"fmt"
+	"strings"
 )
 
 var (
@@ -16,14 +18,50 @@ var (
 	flagPidFile  = flag.String("pid-file", "/var/run/astra.pid", "Astra PID file path")
 )
 
+//go:embed ui/index.html
+var uiHTML string
+
 func main() {
 	flag.Parse()
 	initLogger()
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/control/", basicAuth(*flagLogin, *flagPassword, handleControl))
-	mux.HandleFunc("/api/", basicAuth(*flagLogin, *flagPassword, handleAPI))
+	auth := func(h http.HandlerFunc) http.HandlerFunc {
+		return basicAuth(*flagLogin, *flagPassword, h)
+	}
+
+	// Web UI
+	mux.HandleFunc("/", auth(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, uiHTML)
+	}))
+
+	// Existing API bridge
+	mux.HandleFunc("/control/", auth(handleControl))
+
+	// API: system, stream-status, adapter-status, log + new CRUD
+	mux.HandleFunc("/api/", auth(func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/")
+		// allow CORS preflight
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		switch {
+		case path == "streams" || strings.HasPrefix(path, "streams/"):
+			handleStreamsAPI(w, r)
+		case path == "adapters" || strings.HasPrefix(path, "adapters/"):
+			handleAdaptersAPI(w, r)
+		case path == "cams" || strings.HasPrefix(path, "cams/"):
+			handleCamsAPI(w, r)
+		default:
+			handleAPI(w, r)
+		}
+	}))
 
 	addr := fmt.Sprintf(":%s", *flagPort)
 	log.Printf("astra-api listening on %s", addr)
