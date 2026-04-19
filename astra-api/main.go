@@ -13,6 +13,7 @@ var (
 	flagPassword = flag.String("password", "admin", "Basic auth password")
 	flagConfig   = flag.String("config", "/etc/astra/astra.lua", "Astra config path")
 	flagAstraBin = flag.String("astra-bin", "/usr/bin/astra", "Astra binary path")
+	flagPidFile  = flag.String("pid-file", "/var/run/astra.pid", "Astra PID file path")
 )
 
 func main() {
