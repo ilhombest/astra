@@ -98,6 +98,19 @@ type User struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+type ClusterAdapter struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	NodeID    string    `gorm:"size:36;index" json:"node_id"`
+	Name      string    `gorm:"size:100" json:"name"`
+	Adapter   int       `gorm:"default:0" json:"adapter"`
+	Device    int       `gorm:"default:0" json:"device"`
+	DvbType   string    `gorm:"size:20;default:'DVB-S2'" json:"dvb_type"`
+	MAC       string    `gorm:"size:20" json:"mac"`
+	Enabled   bool      `gorm:"default:true" json:"enabled"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type UserRefreshToken struct {
 	ID        uint      `gorm:"primaryKey"`
 	UserID    uint      `gorm:"index;not null"`
@@ -163,6 +176,7 @@ func initDB() bool {
 		&ClusterEdge{},
 		&ClusterPort{},
 		&ClusterStream{},
+		&ClusterAdapter{},
 		&User{},
 		&UserRefreshToken{},
 	); err != nil {

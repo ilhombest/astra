@@ -10,6 +10,7 @@ import {
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
+import SettingsInputAntennaIcon from "@mui/icons-material/SettingsInputAntenna";
 
 import { useToast } from "utils/useToast";
 import { sendDataToServer } from "utils/functions";
@@ -19,7 +20,8 @@ export default function ContextMenu({
     node_id,
     onClose,
     onAddInput,
-    onRefreshConfig
+    onRefreshConfig,
+    onAdapters
 }) {
 
     const toast = useToast();
@@ -46,6 +48,7 @@ export default function ContextMenu({
     ////////////////////
     const items = [
         { label: "Make stream", icon: AddCircleOutlineIcon, onClick: onAddInput },
+        { label: "Adapters", icon: SettingsInputAntennaIcon, onClick: onAdapters },
         { label: "Reload config", icon: RefreshIcon, onClick: onRefreshConfig },
         { divider: true },
         { label: "Restart Astra", icon: RestartAltIcon, onClick: handleRestart }

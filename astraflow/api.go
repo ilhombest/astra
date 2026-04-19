@@ -50,6 +50,10 @@ var apiRoutes = map[string]APIFn{
 	"getSettings":    apiGetSettings,
 	"saveSetting":    apiSaveSetting,
 	"restartProgram": apiRestartProgram,
+	// adapters
+	"getAdapters":    apiGetAdapters,
+	"saveAdapter":    apiSaveAdapter,
+	"deleteAdapter":  apiDeleteAdapter,
 	// astra
 	"restartNode":       apiRestartNode,
 	"getAstraConfig":    apiGetAstraConfig,
