@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 )
 
 // --- background CPU sampler ---
@@ -262,23 +263,36 @@ func handleAdapterStatus(w http.ResponseWriter, _ *http.Request, adapter, device
 	})
 }
 
-// readDVBStatus reads signal stats from Linux DVB sysfs.
-// Falls back to zeros if hardware not present.
+// readDVBStatus reads signal stats via DVB ioctl API from /dev/dvb/adapterN/frontendN.
 func readDVBStatus(adapter, device int) (lock bool, signal, snr, ber int) {
-	base := fmt.Sprintf("/sys/class/dvb/dvb%d.frontend%d", adapter, device)
-	readInt := func(file string) int {
-		data, err := os.ReadFile(base + "/" + file)
-		if err != nil {
-			return 0
-		}
-		v, _ := strconv.Atoi(strings.TrimSpace(string(data)))
-		return v
+	path := fmt.Sprintf("/dev/dvb/adapter%d/frontend%d", adapter, device)
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return
 	}
-	status := readInt("status")
-	lock = (status & 0x10) != 0
-	signal = readInt("signal") * 100 / 65535
-	snr = readInt("snr") * 100 / 65535
-	ber = readInt("ber")
+	defer f.Close()
+	fd := f.Fd()
+
+	// FE_READ_STATUS
+	var st uint32
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, 0x6f01, uintptr(unsafe.Pointer(&st))); e == 0 {
+		lock = (st & 0x10) != 0 // FE_HAS_LOCK
+	}
+	// FE_READ_SIGNAL_STRENGTH
+	var sig uint16
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, 0x6f03, uintptr(unsafe.Pointer(&sig))); e == 0 {
+		signal = int(sig) * 100 / 65535
+	}
+	// FE_READ_SNR
+	var snrVal uint16
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, 0x6f04, uintptr(unsafe.Pointer(&snrVal))); e == 0 {
+		snr = int(snrVal) * 100 / 65535
+	}
+	// FE_READ_BER
+	var berVal uint32
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, 0x6f02, uintptr(unsafe.Pointer(&berVal))); e == 0 {
+		ber = int(berVal)
+	}
 	return
 }
 

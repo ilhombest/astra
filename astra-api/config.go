@@ -149,43 +149,48 @@ func luaToJSON(content string) (map[string]any, error) {
 	}, nil
 }
 
-// extractMakeStreamBlocks finds all make_stream({...}) bodies using brace counting.
+// extractMakeStreamBlocks finds all make_stream({...}) and make_channel({...}) bodies.
 func extractMakeStreamBlocks(lua string) []string {
 	var blocks []string
-	i := 0
-	for i < len(lua) {
-		idx := strings.Index(lua[i:], "make_stream")
-		if idx < 0 {
-			break
-		}
-		start := i + idx
-		openBrace := strings.Index(lua[start:], "{")
-		if openBrace < 0 {
-			break
-		}
-		braceStart := start + openBrace
-		depth, end := 0, -1
-		for j := braceStart; j < len(lua); j++ {
-			if lua[j] == '{' {
-				depth++
-			} else if lua[j] == '}' {
-				depth--
-				if depth == 0 {
-					end = j
-					break
+	for _, keyword := range []string{"make_stream", "make_channel"} {
+		i := 0
+		for i < len(lua) {
+			idx := strings.Index(lua[i:], keyword)
+			if idx < 0 {
+				break
+			}
+			start := i + idx
+			openBrace := strings.Index(lua[start:], "{")
+			if openBrace < 0 {
+				break
+			}
+			braceStart := start + openBrace
+			depth, end := 0, -1
+			for j := braceStart; j < len(lua); j++ {
+				if lua[j] == '{' {
+					depth++
+				} else if lua[j] == '}' {
+					depth--
+					if depth == 0 {
+						end = j
+						break
+					}
 				}
 			}
+			if end < 0 {
+				break
+			}
+			blocks = append(blocks, lua[braceStart+1:end])
+			i = end + 1
 		}
-		if end < 0 {
-			break
-		}
-		blocks = append(blocks, lua[braceStart+1:end])
-		i = end + 1
 	}
 	return blocks
 }
 
+var reNumber = regexp.MustCompile(`(\w+)\s*=\s*(-?\d+(?:\.\d+)?)[\s,;]`)
+
 // parseLuaTable parses key=value pairs from a Lua table body.
+// Handles semicolons as separators (make_channel style) in addition to commas.
 func parseLuaTable(body string) map[string]any {
 	result := map[string]any{}
 
@@ -194,10 +199,9 @@ func parseLuaTable(body string) map[string]any {
 	for _, m := range reArray.FindAllStringSubmatch(body, -1) {
 		result[m[1]] = parseStringArray(m[2])
 	}
-	// remove array sections so string/bool patterns don't match inside
 	body = reArray.ReplaceAllString(body, "")
 
-	// strings: key="value"
+	// strings: key="value" or key='value'
 	for _, m := range reString.FindAllStringSubmatch(body, -1) {
 		result[m[1]] = m[2]
 	}
@@ -207,6 +211,12 @@ func parseLuaTable(body string) map[string]any {
 	// booleans: key=true|false
 	for _, m := range reBool.FindAllStringSubmatch(body, -1) {
 		result[m[1]] = m[2] == "true"
+	}
+	// numbers: key=6 or key=11747
+	for _, m := range reNumber.FindAllStringSubmatch(body+" ", -1) {
+		if _, exists := result[m[1]]; !exists {
+			result[m[1]] = m[2]
+		}
 	}
 	return result
 }
