@@ -60,9 +60,12 @@ var apiRoutes = map[string]APIFn{
 	"getAdapters":    apiGetAdapters,
 	"saveAdapter":    apiSaveAdapter,
 	"deleteAdapter":  apiDeleteAdapter,
-	// softcam
-	"getSoftcam":  apiGetSoftcam,
-	"saveSoftcam": apiSaveSoftcam,
+	// softcam / CA
+	"getSoftcam":    apiGetSoftcam,
+	"saveSoftcam":   apiSaveSoftcam,
+	"getNewcamd":    apiGetNewcamd,
+	"saveNewcamd":   apiSaveNewcamd,
+	"deleteNewcamd": apiDeleteNewcamd,
 	// astra
 	"restartNode":       apiRestartNode,
 	"getAstraConfig":    apiGetAstraConfig,

@@ -134,6 +134,21 @@ type ClusterAdapter struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type NewcamdServer struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	NodeID    string    `gorm:"size:36;index" json:"node_id"`
+	Name      string    `gorm:"size:100" json:"name"`
+	Host      string    `gorm:"size:255" json:"host"`
+	Port      int       `gorm:"default:2222" json:"port"`
+	Username  string    `gorm:"size:100" json:"username"`
+	Password  string    `gorm:"size:100" json:"password"`
+	// 14 bytes DES key in hex, 28 chars
+	DESKey    string    `gorm:"size:56" json:"des_key"`
+	Enabled   bool      `gorm:"default:true" json:"enabled"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type UserRefreshToken struct {
 	ID        uint      `gorm:"primaryKey"`
 	UserID    uint      `gorm:"index;not null"`
@@ -200,6 +215,7 @@ func initDB() bool {
 		&ClusterPort{},
 		&ClusterStream{},
 		&ClusterAdapter{},
+		&NewcamdServer{},
 		&User{},
 		&UserRefreshToken{},
 	); err != nil {
