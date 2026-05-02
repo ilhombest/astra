@@ -157,6 +157,12 @@ func jsonToLua(cfg map[string]any) string {
 		sb.WriteString(fmt.Sprintf("  user = %q,\n", anyStr(c["user"])))
 		sb.WriteString(fmt.Sprintf("  pass = %q,\n", anyStr(c["pass"])))
 		sb.WriteString(fmt.Sprintf("  key  = %q,\n", anyStr(c["key"])))
+		if v, ok := c["disable_emm"].(bool); ok {
+			sb.WriteString(fmt.Sprintf("  disable_emm = %v,\n", v))
+		}
+		if t := anyStr(c["timeout"]); t != "" && t != "0" {
+			sb.WriteString(fmt.Sprintf("  timeout = %s,\n", t))
+		}
 		sb.WriteString("})\n\n")
 	}
 

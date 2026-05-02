@@ -88,22 +88,100 @@ func captureProcess(cmd *exec.Cmd) {
 	}()
 }
 
-// ── process management ────────────────────────────────────────────
+// ── process tracking ─────────────────────────────────────────────
 
-func restartAstra() error {
+var (
+	astraProc   *os.Process
+	astraProcMu sync.Mutex
+	astraStart  time.Time
+)
+
+func setAstraProc(p *os.Process) {
+	astraProcMu.Lock()
+	astraProc = p
+	astraStart = time.Now()
+	astraProcMu.Unlock()
+}
+
+func isAstraAlive() bool {
+	astraProcMu.Lock()
+	p := astraProc
+	astraProcMu.Unlock()
+	if p != nil {
+		if p.Signal(syscall.Signal(0)) == nil {
+			return true
+		}
+	}
+	// fallback: pidfile
 	pid, err := readPID()
 	if err != nil {
-		return startAstra()
+		return false
 	}
 	proc, err := os.FindProcess(pid)
 	if err != nil {
-		return startAstra()
+		return false
 	}
-	if err := proc.Signal(syscall.Signal(0)); err != nil {
-		return startAstra()
+	return proc.Signal(syscall.Signal(0)) == nil
+}
+
+func astraUptimeMin() int {
+	astraProcMu.Lock()
+	p := astraProc
+	t := astraStart
+	astraProcMu.Unlock()
+	if p == nil || !t.IsZero() == false {
+		return 0
 	}
-	addLog("info", fmt.Sprintf("sending SIGHUP to astra pid=%d", pid))
-	return proc.Signal(syscall.SIGHUP)
+	if p.Signal(syscall.Signal(0)) != nil {
+		return 0
+	}
+	return int(time.Since(t).Minutes())
+}
+
+// ── process management ────────────────────────────────────────────
+
+// attachOrStartAstra is called once on startup.
+// If astra is already running (pidfile + process alive), restart it through
+// astra-api so its output is captured in the log ring buffer.
+// If not running, start it fresh.
+func attachOrStartAstra() {
+	time.Sleep(500 * time.Millisecond) // let HTTP server start first
+	pid, err := readPID()
+	if err != nil {
+		addLog("info", "astra not running, starting…")
+		if err := startAstra(); err != nil {
+			addLog("error", "failed to start astra: "+err.Error())
+		}
+		return
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil || proc.Signal(syscall.Signal(0)) != nil {
+		addLog("info", "stale pidfile, starting astra…")
+		_ = os.Remove(*flagPidFile)
+		if err := startAstra(); err != nil {
+			addLog("error", "failed to start astra: "+err.Error())
+		}
+		return
+	}
+	// astra is running but not captured — restart to capture logs
+	addLog("info", fmt.Sprintf("astra running (pid=%d), restarting to capture logs…", pid))
+	if err := stopAstra(); err != nil {
+		addLog("error", "stop failed: "+err.Error())
+	}
+	time.Sleep(800 * time.Millisecond)
+	if err := startAstra(); err != nil {
+		addLog("error", "failed to restart astra: "+err.Error())
+	}
+}
+
+// restartAstra does a full stop+start so the Lua config is fully reloaded.
+// SIGHUP in this astra version does not re-read the Lua script.
+func restartAstra() error {
+	if err := stopAstra(); err != nil {
+		addLog("error", "stop failed: "+err.Error())
+	}
+	time.Sleep(600 * time.Millisecond)
+	return startAstra()
 }
 
 func startAstra() error {
@@ -120,11 +198,17 @@ func startAstra() error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start astra: %w", err)
 	}
+	setAstraProc(cmd.Process)
 	addLog("info", fmt.Sprintf("astra started pid=%d", cmd.Process.Pid))
 	go func() {
 		if err := cmd.Wait(); err != nil {
 			addLog("error", fmt.Sprintf("astra exited: %v", err))
 		}
+		astraProcMu.Lock()
+		if astraProc == cmd.Process {
+			astraProc = nil
+		}
+		astraProcMu.Unlock()
 	}()
 	return nil
 }

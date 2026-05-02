@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -203,37 +204,8 @@ func handleSystemStatus(w http.ResponseWriter, _ *http.Request) {
 	appMemKB := astraProcMemKB()
 	appCPU := astraAppCPU()
 
-	pid, _ := readPID()
-	uptimeMin := 0
-	if pid > 0 {
-		if data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid)); err == nil {
-			// field 22 = starttime in clock ticks since system boot
-			s := string(data)
-			end := strings.LastIndex(s, ")")
-			if end >= 0 {
-				fields := strings.Fields(s[end+2:])
-				if len(fields) >= 20 {
-					startTicks, _ := strconv.ParseUint(fields[19], 10, 64)
-					bootData, _ := os.ReadFile("/proc/uptime")
-					var bootSec float64
-					fmt.Sscanf(string(bootData), "%f", &bootSec)
-					procStartSec := float64(startTicks) / 100.0
-					runSec := bootSec - procStartSec
-					if runSec > 0 {
-						uptimeMin = int(runSec / 60)
-					}
-				}
-			}
-		}
-	}
-
-	// check astra online
-	isOnline := false
-	if pid > 0 {
-		if proc, err := os.FindProcess(pid); err == nil {
-			isOnline = proc.Signal(syscall.Signal(0)) == nil
-		}
-	}
+	isOnline := isAstraAlive()
+	uptimeMin := astraUptimeMin()
 	if !isOnline {
 		appCPU = 0
 		appMemKB = 0
@@ -314,20 +286,77 @@ func handleStreamStatus(w http.ResponseWriter, _ *http.Request, id string) {
 	}
 	s, _ := stream.(map[string]any)
 	inputs, _ := s["input"].([]any)
+
+	bitrate, ccErr, pesErr, onAir := 0, 0, 0, false
+	if stat := getStatByID(id); stat != nil {
+		bitrate = stat.Bitrate
+		ccErr = stat.CCErr
+		pesErr = stat.PESErr
+		onAir = stat.OnAir
+	}
+
 	inputStatus := map[string]any{
-		"bitrate":   0,
-		"cc_error":  0,
-		"pes_error": 0,
+		"bitrate":   bitrate,
+		"cc_error":  ccErr,
+		"pes_error": pesErr,
+		"on_air":    onAir,
 	}
 	if len(inputs) > 0 {
 		inputStatus["url"] = inputs[0]
 	}
 	json.NewEncoder(w).Encode(map[string]any{
 		"id":        id,
-		"bitrate":   0,
-		"cc_error":  0,
-		"pes_error": 0,
+		"bitrate":   bitrate,
+		"cc_error":  ccErr,
+		"pes_error": pesErr,
+		"on_air":    onAir,
 		"input":     inputStatus,
 		"output":    []any{},
 	})
+}
+
+func handleInterfaces(w http.ResponseWriter, _ *http.Request) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var names []string
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue // skip loopback
+		}
+		if iface.Flags&net.FlagUp == 0 {
+			continue // skip down interfaces
+		}
+		names = append(names, iface.Name)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(names)
+}
+
+func handleStreamsStatus(w http.ResponseWriter, _ *http.Request) {
+	cfg, err := loadConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	streams, _ := cfg["streams"].(map[string]any)
+	result := map[string]any{}
+	for id, v := range streams {
+		s, _ := v.(map[string]any)
+		name, _ := s["name"].(string)
+		if stat := getStatByName(name); stat != nil {
+			result[id] = map[string]any{
+				"on_air":    stat.OnAir,
+				"bitrate":   stat.Bitrate,
+				"cc_error":  stat.CCErr,
+				"pes_error": stat.PESErr,
+			}
+		} else {
+			// null on_air means no monitoring data yet
+			result[id] = map[string]any{"on_air": nil}
+		}
+	}
+	json.NewEncoder(w).Encode(result)
 }

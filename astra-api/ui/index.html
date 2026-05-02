@@ -121,6 +121,28 @@ tr:hover td{background:#fafbff}
 .svc-pnr{font-family:monospace;background:#f3f4f6;border-radius:4px;padding:2px 6px;font-size:12px;color:#555;min-width:50px;text-align:center}
 .svc-name{flex:1;font-size:13px}
 .svc-prov{font-size:11px;color:#9ca3af}
+
+/* Stream status */
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#d1d5db;flex-shrink:0}
+.dot.on{background:#22c55e;box-shadow:0 0 5px #22c55e88;animation:pulse 2s infinite}
+.dot.err{background:#ef4444}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+
+/* Signal bar */
+.sig-bar{display:inline-flex;align-items:flex-end;gap:2px;height:14px;vertical-align:middle}
+.sig-bar span{width:4px;border-radius:1px;background:#d1d5db}
+.sig-bar.lock span{background:#22c55e}
+.sig-bar.warn span{background:#f59e0b}
+.sig-pct{font-size:11px;color:#555;margin-left:4px;vertical-align:middle}
+.bitrate{font-size:12px;font-family:monospace;color:#374151}
+.pes-err{font-size:12px;color:#ef4444;font-family:monospace}
+.stream-actions{display:flex;gap:3px;flex-wrap:nowrap}
+.btn-stop{padding:3px 8px;font-size:11px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;cursor:pointer}
+.btn-stop:hover{background:#fca5a5}
+.btn-start{padding:3px 8px;font-size:11px;background:#dcfce7;color:#16a34a;border:1px solid #86efac;border-radius:4px;cursor:pointer}
+.btn-start:hover{background:#bbf7d0}
+.btn-restart{padding:3px 8px;font-size:11px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:4px;cursor:pointer}
+.btn-restart:hover{background:#bfdbfe}
 </style>
 </head>
 <body>
@@ -162,7 +184,7 @@ tr:hover td{background:#fafbff}
         <div class="card-head"><h2>Streams</h2></div>
         <div class="card-body" style="padding:0">
           <table>
-            <thead><tr><th>Name</th><th>ID</th><th>Enable</th><th>Inputs</th><th>Outputs</th></tr></thead>
+            <thead><tr><th width="24"></th><th>Name</th><th>Bitrate</th><th>PES Err</th><th>Inputs</th></tr></thead>
             <tbody id="dash-streams"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
           </table>
         </div>
@@ -178,7 +200,7 @@ tr:hover td{background:#fafbff}
         </div>
         <div class="card-body" style="padding:0">
           <table>
-            <thead><tr><th>Name</th><th>ID</th><th>Type</th><th>Enable</th><th>Inputs</th><th>Outputs</th><th width="90">Actions</th></tr></thead>
+            <thead><tr><th width="24"></th><th>Name</th><th>Type</th><th>Bitrate</th><th>PES Err</th><th>Inputs</th><th>Actions</th></tr></thead>
             <tbody id="streams-tbody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
           </table>
         </div>
@@ -194,8 +216,8 @@ tr:hover td{background:#fafbff}
         </div>
         <div class="card-body" style="padding:0">
           <table>
-            <thead><tr><th>Adapter</th><th>Type</th><th>Frequency</th><th>Pol/BW</th><th>Symbol Rate</th><th>Enabled</th><th width="90">Actions</th></tr></thead>
-            <tbody id="adapters-tbody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+            <thead><tr><th>Adapter</th><th>Type</th><th>Frequency</th><th>Pol/BW</th><th>Symbol Rate</th><th>Signal</th><th>SNR</th><th>Enabled</th><th width="90">Actions</th></tr></thead>
+            <tbody id="adapters-tbody"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -268,6 +290,7 @@ tr:hover td{background:#fafbff}
 let currentTab = 'dashboard';
 let modalCallback = null;
 let autoRefresh = null;
+let streamStatusCache = {};  // id → {on_air, bitrate, cc_error, pes_error}
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 document.querySelectorAll('#sidebar nav a').forEach(a => {
@@ -286,10 +309,14 @@ function switchTab(tab) {
   document.getElementById('page-title').textContent =
     {dashboard:'Dashboard',streams:'Streams',adapters:'Adapters',newcamd:'NewCamd',log:'Log'}[tab] || tab;
   clearInterval(autoRefresh);
-  if (tab === 'dashboard') { loadDashboard(); autoRefresh = setInterval(loadDashboard, 5000); }
-  else if (tab === 'streams') loadStreams();
-  else if (tab === 'adapters') loadAdapters();
-  else if (tab === 'newcamd') loadCams();
+  if (tab === 'dashboard') {
+    loadDashboard();
+    autoRefresh = setInterval(loadDashboard, 5000);
+  } else if (tab === 'streams') {
+    loadStreams();
+    autoRefresh = setInterval(pollStreamsStatus, 3000);
+  } else if (tab === 'adapters') { if (adapterPollTimer) { clearTimeout(adapterPollTimer); adapterPollTimer = null; } loadAdapters(); }
+  else if (tab === 'newcamd') { if (adapterPollTimer) { clearTimeout(adapterPollTimer); adapterPollTimer = null; } loadCams(); }
   else if (tab === 'log') loadLog();
 }
 
@@ -359,45 +386,98 @@ async function loadDashboard() {
     s('s-streams').querySelector('.val').textContent = streams.length || 0;
     s('s-adapters').querySelector('.val').textContent = adapters.length || 0;
 
+    let statusMap = {};
+    try { statusMap = await api('GET','streams-status'); } catch(e){}
+
     const tbody = document.getElementById('dash-streams');
     if (!streams.length) {
       tbody.innerHTML = '<tr><td colspan="5" class="empty">No streams configured</td></tr>';
     } else {
-      tbody.innerHTML = streams.map(s => `
-        <tr>
+      tbody.innerHTML = streams.map(s => {
+        const id = s._id || s.id || '';
+        const st = statusMap[id];
+        let dotCls = 'dot', bitrateStr = '—', pesStr = '—';
+        const hasData = st && st.on_air !== null && st.on_air !== undefined;
+        if (hasData) {
+          dotCls = 'dot ' + (st.on_air ? 'on' : 'err');
+          bitrateStr = st.on_air ? (st.bitrate || 0).toLocaleString() + ' Kb/s' : 'No signal';
+          pesStr = st.pes_error ? String(st.pes_error) : (st.on_air ? '0' : '—');
+        }
+        return `<tr>
+          <td><span class="${dotCls}"></span></td>
           <td><b>${esc(s.name||'')}</b></td>
-          <td style="color:#888;font-size:12px">${esc(s._id||s.id||'')}</td>
-          <td>${badge(bool(s.enable))}</td>
+          <td class="bitrate">${bitrateStr}</td>
+          <td>${pesStr}</td>
           <td>${arrLen(s.input)}</td>
-          <td>${arrLen(s.output)}</td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
     }
   } catch(e) { console.error(e); }
 }
 
 // ── Streams ────────────────────────────────────────────────────────────────
+let streamsData = [];
+
 async function loadStreams() {
   try {
-    const list = await api('GET','streams');
-    const tbody = document.getElementById('streams-tbody');
-    if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">No streams — click Add Stream</td></tr>';
-      return;
-    }
-    tbody.innerHTML = list.map(s => `
-      <tr>
-        <td><b>${esc(s.name||'')}</b></td>
-        <td style="color:#888;font-size:11px">${esc(s._id||s.id||'')}</td>
-        <td><span class="badge badge-blue">${esc(s.type||'spts')}</span></td>
-        <td>${badge(bool(s.enable))}</td>
-        <td>${arrLen(s.input)}</td>
-        <td>${arrLen(s.output)}</td>
-        <td>
-          <button class="btn-icon" title="Edit" onclick='openStreamModal(${JSON.stringify(s)})'>✏️</button>
-          <button class="btn-icon" title="Delete" onclick="deleteStream('${esc(s._id||s.id||'')}')">🗑️</button>
-        </td>
-      </tr>`).join('');
+    streamsData = await api('GET','streams');
+    renderStreams();
+    pollStreamsStatus();
   } catch(e) { toast(e.message,true); }
+}
+
+async function pollStreamsStatus() {
+  try {
+    streamStatusCache = await api('GET','streams-status');
+    renderStreams();
+  } catch(e) {}
+}
+
+function renderStreams() {
+  const tbody = document.getElementById('streams-tbody');
+  if (!tbody) return;
+  if (!streamsData.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">No streams — click Add Stream</td></tr>';
+    return;
+  }
+  tbody.innerHTML = streamsData.map(s => {
+    const id  = s._id || s.id || '';
+    const st  = streamStatusCache[id];
+    let dotCls = 'dot', bitrateStr = '—', pesStr = '—';
+    const hasData = st && st.on_air !== null && st.on_air !== undefined;
+    if (hasData) {
+      dotCls = 'dot ' + (st.on_air ? 'on' : 'err');
+      bitrateStr = st.on_air ? (st.bitrate ? st.bitrate.toLocaleString() + ' Kb/s' : '0 Kb/s') : '<span style="color:#ef4444">No signal</span>';
+      pesStr = st.pes_error ? `<span class="pes-err">${st.pes_error}</span>` : (st.on_air ? '0' : '—');
+    }
+    return `<tr data-id="${esc(id)}">
+      <td><span class="${dotCls}"></span></td>
+      <td><b>${esc(s.name||'')}</b><br><span style="color:#aaa;font-size:10px">${esc(id)}</span></td>
+      <td><span class="badge badge-blue">${esc(s.type||'spts')}</span></td>
+      <td class="bitrate">${bitrateStr}</td>
+      <td>${pesStr}</td>
+      <td>${arrLen(s.input)}</td>
+      <td>
+        <div class="stream-actions">
+          <button class="btn-stop" title="Stop" onclick="streamAction('${esc(id)}','stop')">■</button>
+          <button class="btn-start" title="Start" onclick="streamAction('${esc(id)}','start')">▶</button>
+          <button class="btn-restart" title="Restart" onclick="streamAction('${esc(id)}','restart')">↺</button>
+          <button class="btn-icon" title="Edit" onclick='openStreamModal(${JSON.stringify(s)})'>✏️</button>
+          <button class="btn-icon" title="Delete" onclick="deleteStream('${esc(id)}')">🗑️</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function streamAction(id, action) {
+  const labels = {stop:'Stopping…', start:'Starting…', restart:'Restarting…'};
+  toast(labels[action] || action + '…');
+  try {
+    await api('POST', 'streams/' + id + '/restart?action=' + action);
+    toast(action.charAt(0).toUpperCase() + action.slice(1) + ' OK');
+    setTimeout(pollStreamsStatus, 1500);
+  } catch(e) { toast(e.message, true); }
 }
 
 function openStreamModal(s={}) {
@@ -414,13 +494,49 @@ function openStreamModal(s={}) {
         <option value="mpts" ${s.type==='mpts'?'selected':''}>MPTS</option>
       </select>
     </div>
+    <div class="form-row"><label>CAM / Softcam <span style="font-weight:400;color:#9ca3af">(for encrypted channels)</span></label>
+      <select id="f-cam"><option value="">Loading…</option></select></div>
     <div class="form-row"><label>Input URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
       <textarea id="f-input" rows="3">${esc(inputs)}</textarea></div>
-    <div class="form-row"><label>Output URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
-      <textarea id="f-output" rows="3">${esc(outputs)}</textarea></div>
+    <div class="form-row">
+      <label>Output URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
+      <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+        <select id="f-out-type" style="width:80px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">
+          <option>udp</option><option>rtp</option><option>http</option>
+        </select>
+        <select id="f-out-iface" style="flex:1;min-width:100px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">
+          <option value="">Loading…</option>
+        </select>
+        <input id="f-out-addr" placeholder="239.x.x.x" style="flex:2;min-width:120px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">
+        <input id="f-out-port" placeholder="1234" type="number" style="width:72px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addOutputUrl()">+ Add</button>
+      </div>
+      <textarea id="f-output" rows="3">${esc(outputs)}</textarea>
+    </div>
     <div class="form-row"><label>BISS Key <span style="font-weight:400;color:#9ca3af">(16 or 32 hex chars, optional)</span></label>
       <input id="f-biss" value="${esc(s.biss||'')}" placeholder="e.g. 1122334455667700"></div>
   `;
+  // populate cams and interfaces async after modal is open
+  api('GET','interfaces').then(list => {
+    const sel = document.getElementById('f-out-iface');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— no iface —</option>' +
+      (Array.isArray(list) ? list : []).map(n => `<option>${esc(n)}</option>`).join('');
+  }).catch(() => {
+    const sel = document.getElementById('f-out-iface');
+    if (sel) sel.innerHTML = '<option value="">— no iface —</option>';
+  });
+  api('GET','cams').then(list => {
+    const sel = document.getElementById('f-cam');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— None —</option>' +
+      (Array.isArray(list) ? list : []).map(c =>
+        `<option value="${esc(c._id)}" ${s.cam===c._id?'selected':''}>${esc(c.name||c._id)}</option>`
+      ).join('');
+  }).catch(() => {
+    const sel = document.getElementById('f-cam');
+    if (sel) sel.innerHTML = '<option value="">— None —</option>';
+  });
   openModal(isEdit ? 'Edit Stream' : 'Add Stream', html, async () => {
     const name = document.getElementById('f-name').value.trim();
     if (!name) throw new Error('Name is required');
@@ -431,12 +547,27 @@ function openStreamModal(s={}) {
       input:  splitLines(document.getElementById('f-input').value),
       output: splitLines(document.getElementById('f-output').value),
     };
+    const cam  = document.getElementById('f-cam').value;
+    if (cam) body.cam = cam;
     const biss = document.getElementById('f-biss').value.trim();
     if (biss) body.biss = biss;
     if (isEdit) { await api('PUT','streams/'+id, body); toast('Stream updated'); }
     else        { await api('POST','streams', body);    toast('Stream created'); }
     loadStreams();
   });
+}
+
+function addOutputUrl() {
+  const type  = document.getElementById('f-out-type').value;
+  const iface = document.getElementById('f-out-iface').value.trim();
+  const addr  = document.getElementById('f-out-addr').value.trim();
+  const port  = document.getElementById('f-out-port').value.trim() || '1234';
+  if (!addr) { toast('Enter output address', true); return; }
+  const host = iface ? `${iface}@${addr}` : addr;
+  const url  = `${type}://${host}:${port}`;
+  const ta = document.getElementById('f-output');
+  ta.value = ta.value ? ta.value.trimEnd() + '\n' + url : url;
+  document.getElementById('f-out-addr').value = '';
 }
 
 async function deleteStream(id) {
@@ -446,25 +577,39 @@ async function deleteStream(id) {
 }
 
 // ── Adapters ───────────────────────────────────────────────────────────────
+let adapterList = [];
+let adapterPollTimer = null;
+
+function sigBar(pct, lock) {
+  const cls = lock ? 'lock' : (pct > 30 ? 'warn' : '');
+  const bars = [25,50,75,100].map(t =>
+    `<span style="height:${Math.round(14*t/100)}px;opacity:${pct>=t?1:0.2}"></span>`
+  ).join('');
+  return `<span class="sig-bar ${cls}">${bars}</span><span class="sig-pct">${pct}%</span>`;
+}
+
 async function loadAdapters() {
   try {
-    const list = await api('GET','adapters');
+    adapterList = await api('GET','adapters');
     const tbody = document.getElementById('adapters-tbody');
-    if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">No adapters — click Add Adapter</td></tr>';
+    if (!adapterList.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="empty">No adapters — click Add Adapter</td></tr>';
       return;
     }
-    tbody.innerHTML = list.map(a => {
+    tbody.innerHTML = adapterList.map(a => {
       const isSat = /S2?$/.test(a.dvb_type||'S2');
       const pol   = isSat ? esc(str(a.polarization)) : '';
       const bw    = !isSat ? esc(str(a.bandwidth))+'MHz' : '';
       const sr    = isSat ? num(a.symbolrate).toLocaleString() : '';
-      return `<tr>
-        <td>adapter<b>${str(a.adapter,'?')}</b>${a.device?'/dev'+a.device:''}</td>
+      const adN   = str(a.adapter,'0'), devN = str(a.device,'0');
+      return `<tr id="arow-${adN}-${devN}">
+        <td>adapter<b>${adN}</b>${a.device?'/dev'+a.device:''}</td>
         <td><span class="badge badge-blue">${esc(a.dvb_type||'DVB-S2')}</span></td>
         <td>${num(a.frequency).toLocaleString()} kHz</td>
         <td>${pol||bw||'—'}</td>
         <td>${sr ? sr+' kBd' : '—'}</td>
+        <td id="asig-${adN}-${devN}">—</td>
+        <td id="asnr-${adN}-${devN}">—</td>
         <td>${badge(bool(a.enabled)!==false)}</td>
         <td>
           <button class="btn-icon" title="Scan channels" onclick="scanAdapter('${esc(a._id||'')}')">📡</button>
@@ -473,7 +618,24 @@ async function loadAdapters() {
         </td>
       </tr>`;
     }).join('');
+    pollAdapterSignals();
   } catch(e) { toast(e.message,true); }
+}
+
+async function pollAdapterSignals() {
+  if (adapterPollTimer) clearTimeout(adapterPollTimer);
+  if (document.getElementById('tab-adapters').classList.contains('active')) {
+    for (const a of adapterList) {
+      const adN = str(a.adapter,'0'), devN = str(a.device,'0');
+      api('GET', `adapter-status/${adN}/${devN}`).then(s => {
+        const sigEl = document.getElementById(`asig-${adN}-${devN}`);
+        const snrEl = document.getElementById(`asnr-${adN}-${devN}`);
+        if (sigEl) sigEl.innerHTML = sigBar(s.signal||0, s.lock);
+        if (snrEl) snrEl.innerHTML = sigBar(s.snr||0, s.lock);
+      }).catch(()=>{});
+    }
+    adapterPollTimer = setTimeout(pollAdapterSignals, 3000);
+  }
 }
 
 function openAdapterModal(a={}) {
@@ -601,6 +763,10 @@ function openCamModal(c={}) {
       <input id="f-key" value="${esc(c.key||'')}" placeholder="0102030405060708091011121314" maxlength="28">
       <div class="hint">Example: 0102030405060708091011121314</div>
     </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Timeout (sec)</label><input id="f-timeout" type="number" min="1" max="120" value="${str(c.timeout,'10')}"></div>
+      <div class="form-row form-check" style="align-self:flex-end;padding-bottom:4px"><input type="checkbox" id="f-disable-emm" ${c.disable_emm?'checked':''}><label for="f-disable-emm">Disable EMM</label></div>
+    </div>
   `;
   openModal(isEdit ? 'Edit NewCamd Server' : 'Add NewCamd Server', html, async () => {
     const host = document.getElementById('f-host').value.trim();
@@ -610,10 +776,12 @@ function openCamModal(c={}) {
     const body = {
       name: document.getElementById('f-name').value.trim() || host,
       host,
-      port: num(document.getElementById('f-port').value, 2222),
-      user: document.getElementById('f-user').value.trim(),
-      pass: document.getElementById('f-pass').value,
-      key:  key || '0102030405060708091011121314',
+      port:        num(document.getElementById('f-port').value, 2222),
+      user:        document.getElementById('f-user').value.trim(),
+      pass:        document.getElementById('f-pass').value,
+      key:         key || '0102030405060708091011121314',
+      timeout:     num(document.getElementById('f-timeout').value, 10),
+      disable_emm: document.getElementById('f-disable-emm').checked,
     };
     if (isEdit) { await api('PUT','cams/'+id, body); toast('Server updated'); }
     else        { await api('POST','cams', body);    toast('Server created'); }
@@ -636,7 +804,7 @@ async function scanAdapter(id) {
   const overlay = document.getElementById('scan-overlay');
   document.getElementById('scan-title').textContent = 'Scanning transponder…';
   document.getElementById('scan-body').innerHTML =
-    '<div class="scan-info"><span class="spinner"></span>Scanning… please wait up to 25 seconds</div>';
+    '<div class="scan-info"><span class="spinner"></span>Scanning… please wait up to 40 seconds</div>';
   overlay.classList.add('show');
 
   try {

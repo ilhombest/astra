@@ -24,6 +24,7 @@ var uiHTML string
 func main() {
 	flag.Parse()
 	initLogger()
+	go attachOrStartAstra()
 
 	mux := http.NewServeMux()
 
@@ -52,12 +53,17 @@ func main() {
 			return
 		}
 		switch {
+		case path == "streams-status":
+			w.Header().Set("Content-Type", "application/json")
+			handleStreamsStatus(w, r)
 		case path == "streams" || strings.HasPrefix(path, "streams/"):
 			handleStreamsAPI(w, r)
 		case path == "adapters" || strings.HasPrefix(path, "adapters/"):
 			handleAdaptersAPI(w, r)
 		case path == "cams" || strings.HasPrefix(path, "cams/"):
 			handleCamsAPI(w, r)
+		case path == "interfaces":
+			handleInterfaces(w, r)
 		default:
 			handleAPI(w, r)
 		}
