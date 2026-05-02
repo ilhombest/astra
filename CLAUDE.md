@@ -1,25 +1,39 @@
 # CLAUDE.md — Astra API Bridge
 
 ## Контекст одной строкой
-Go HTTP сервер эмулирующий API коммерческой Cesbo Astra для связки open source Astra 4.199 (C/Lua) с AstraFlow (Go+React UI).
+Go HTTP сервер + встроенный Web UI для управления open source Astra 4.4.199 (C/Lua) через браузер. Слушает :8000.
 
 ## Структура репо
 ```
 /
-├── ASTRA/          # open source Astra 4.199 (бинарник: /usr/bin/astra)
-├── astraflow/      # UI на Go+React, слушает :9000
-└── astra-api/      # [СОЗДАТЬ] API Bridge, слушает :8000
+├── astra/              # open source Astra 4.4.199 (C/Lua исходники)
+│   ├── scripts/
+│   │   └── stream.lua  # ИЗМЕНЁН: периодический лог битрейта каждую 1с
+│   └── astra           # бинарник (собирать на целевой машине!)
+└── astra-api/          # API Bridge + Web UI
+    ├── main.go         # флаги, роутинг, HTTP сервер
+    ├── control.go      # POST /control/ → version/load/upload/restart/sessions
+    ├── api.go          # GET /api/* → system-status, stream-status, adapter-status, interfaces
+    ├── web_api.go      # CRUD: streams, adapters, cams (newcamd)
+    ├── process.go      # start/stop/restart astra, pidfile, ring buffer логов
+    ├── config.go       # JSON↔Lua конвертация, чтение/запись файла
+    ├── monitor.go      # фоновый парсинг логов → StreamStat (bitrate/cc/pes)
+    ├── scan.go         # POST /api/adapters/{id}/scan → DVB сканирование
+    ├── auth.go         # Basic Auth middleware
+    ├── go.mod
+    └── ui/index.html   # встроенный Web UI (embed)
 ```
 
-## Задача
-Создать `astra-api/` — Go модуль реализующий HTTP API который:
-- AstraFlow вызывает через `POST /control/` и `GET /api/`
-- Управляет процессом `astra --stream` через exec/kill/pidfile
-- Конвертирует JSON конфиг ↔ Lua скрипт
+## Окружение сервера
+- OS: Debian Linux
+- Astra бинарник: `/usr/bin/astra` (собирать из исходников на сервере!)
+- Lua конфиг: `/etc/astra/astra.lua` + JSON копия рядом: `/etc/astra/astra.json`
+- PID файл: `/var/run/astra.pid`
+- astra-api бинарник: `/home/ilya/astra/astra-api/astra-api`
 
 ---
 
-## API контракт (что ожидает AstraFlow)
+## API эндпоинты
 
 ### POST /control/
 ```
@@ -27,141 +41,147 @@ Go HTTP сервер эмулирующий API коммерческой Cesbo A
 {"cmd":"load"}                  → {полный JSON конфиг}
 {"cmd":"upload","config":{...}} → {"status":true}
 {"cmd":"restart"}               → {"status":true}
-{"cmd":"sessions"}              → {"sessions":[...]}
+{"cmd":"sessions"}              → {"sessions":[], "status":"online"|"offline"}
 ```
 
-### GET /api/{path}
+### GET /api/*
 ```
-/api/system-status           → {"cpu":12.5,"mem":45.2,"uptime":3600}
-/api/stream-status/{id}?t=0  → {"id":"...","input":{...},"output":[...]}
+/api/system-status              → {app_cpu_usage, sys_cpu_usage, la1/5/15, app_mem_kb, sys_mem_usage, app_uptime}
+/api/stream-status/{id}         → {id, bitrate, cc_error, pes_error, on_air, input, output}
+/api/streams-status             → {id: {on_air, bitrate, cc_error, pes_error}}  (all at once)
+/api/adapter-status/{N}/{dev}   → {lock, signal, snr, ber, bitrate}
+/api/interfaces                 → ["enp0s31f6", "eth0", ...]  (активные non-loopback)
+/api/log                        → {lines: [{time, level, msg}]}
 ```
 
-Auth: HTTP Basic Auth.
+### CRUD /api/streams, /api/adapters, /api/cams
+```
+GET    /api/streams             → [{_id, name, enable, type, input, output, cam, biss}]
+POST   /api/streams             → {status:true, id}
+PUT    /api/streams/{id}        → {status:true}
+DELETE /api/streams/{id}        → {status:true}
+POST   /api/streams/{id}/restart?action=start|stop|restart
+
+GET    /api/adapters            → [{_id, adapter, device, dvb_type, frequency, ...}]
+POST   /api/adapters/{id}/scan  → {adapter, services:[{sid, name, provider, pids}]}
+
+GET    /api/cams                → [{_id, name, host, port, user, pass, key, timeout, disable_emm}]
+POST/PUT/DELETE /api/cams/{id}
+```
+
+Auth: HTTP Basic Auth на всех эндпоинтах.
+
+---
 
 ## JSON конфиг формат
 ```json
 {
   "streams": {
-    "id1": {
-      "id":"id1","name":"Ch1","enable":true,"type":"spts",
-      "input":["udp://239.0.0.1:1234"],
-      "output":["http://0.0.0.0:8001/play"]
+    "stream_1234": {
+      "id": "stream_1234", "name": "Channel 1", "enable": true, "type": "spts",
+      "input": ["dvb://6#pnr=5601"],
+      "output": ["udp://enp0s31f6@239.72.97.11:1234"],
+      "cam": "cam_5678"
     }
   },
-  "settings": {"http":{"port":8000,"login":"admin","password":"admin"}}
+  "adapters": {
+    "6": {
+      "adapter": 6, "device": 0, "dvb_type": "DVB-S2",
+      "frequency": 12380, "polarization": "V", "symbolrate": 28000,
+      "lof1": 9750, "lof2": 10600, "slof": 11700
+    }
+  },
+  "cams": {
+    "cam_5678": {
+      "name": "CAM 2.2e", "host": "192.168.0.5", "port": 15050,
+      "user": "tvcas", "pass": "1234",
+      "key": "0102030405060708091011121314",
+      "timeout": 10, "disable_emm": false
+    }
+  }
 }
 ```
 
-## Lua конфиг формат (генерировать из JSON)
+## Lua конфиг формат (генерируется автоматически)
 ```lua
--- /etc/astra/astra.lua
-make_stream({
-  name="Ch1", id="id1", enable=true,
-  input={"udp://239.0.0.1:1234"},
-  output={"http://0.0.0.0:8001/play"}
+-- Generated by astra-api
+dvb6 = dvb_tune({
+  type = "S2", tp = "12380:V:28000", lnb = "9750:10600:11700", adapter = 6,
+})
+
+cam_5678 = newcamd({
+  name = "CAM 2.2e", host = "192.168.0.5", port = 15050,
+  user = "tvcas", pass = "1234",
+  key  = "0102030405060708091011121314",
+  disable_emm = false, timeout = 10,
+})
+
+make_channel({
+  name="Channel 1", id="stream_1234", type="spts", enable=true,
+  input={"dvb://dvb6#pnr=5601"},
+  output={"udp://enp0s31f6@239.72.97.11:1234"},
+  cam=cam_5678,
 })
 ```
 
-## Файловая структура astra-api/
-```
-astra-api/
-├── main.go      # флаги --port --login --password --config --astra-bin
-├── control.go   # POST /control/ → version/load/upload/restart/sessions
-├── api.go       # GET /api/system-status, /api/stream-status/{id}
-├── process.go   # start/stop/restart astra процесса, pidfile
-├── config.go    # JSON↔Lua конвертация, чтение/запись файла
-├── auth.go      # Basic Auth middleware
-└── go.mod       # module astra-api, go 1.24
-```
-
-## Окружение сервера
-- OS: Debian Linux
-- Astra бинарник: `/usr/bin/astra`
-- Lua конфиг: `/etc/astra/astra.lua`
-- PID файл: `/var/run/astra.pid`
-- AstraFlow: `/usr/src/astraflow/astraflow` → порт 9000
-
 ---
 
-## SKILLS
+## Ключевые архитектурные решения
 
-### SKILL: add-stream
-**Когда:** добавить новый стрим в конфиг
-**Минимальный промт:**
-```
-add stream: name="{name}" input="{url}" output="{url}" [type=spts|mpts]
-```
-Что делает: добавляет запись в JSON конфиг, генерирует UUID id, конвертирует в Lua, перезапускает astra через SIGHUP.
+### Мониторинг стримов (monitor.go)
+- `astra/scripts/stream.lua` изменён: логирует битрейт **каждую секунду** (не только при смене статуса)
+- Формат лога: `[NAME #1] Bitrate:5432Kbit/s` — суффикс `#1` стрипается при парсинге
+- `on_air=true` статусы никогда не протухают (astra логирует только при изменении состояния)
+- `on_air=false` статусы протухают через 2 минуты
 
-### SKILL: config-convert
-**Когда:** нужна конвертация между форматами
-**Минимальный промт:**
-```
-convert: lua→json | json→lua
-```
-Правила:
-- `make_stream({...})` → запись в `streams[id]`
-- Lua массивы `{...}` → JSON arrays
-- отсутствующий id → генерировать UUID
+### Рестарт astra (process.go)
+- SIGHUP **не перечитывает** Lua конфиг в версии 4.4.199
+- Поэтому `restartAstra()` = полный stop + start (600ms пауза)
+- При старте astra-api: если astra уже запущена — перезапускает её чтобы захватить логи
 
-### SKILL: debug-connection
-**Когда:** AstraFlow не видит ноду
-**Чеклист:**
+### DVB сканирование (scan.go)
+- Обязательно `budget = true` в dvb_tune — иначе аппаратный PID фильтр блокирует SDT (PID 17)
+- Добавляется dummy UDP output для активации канала
+- Флаг `--debug` для подробного вывода
+- Таймаут 40 секунд
+
+### Сборка astra на сервере
+Бинарник в репо собран на другой машине с новым glibc — **на сервере нужно пересобирать**:
 ```bash
-# 1. astra-api запущен?
-curl -u admin:admin http://localhost:8000/control/ -d '{"cmd":"version"}'
-# 2. astra процесс жив?
-cat /var/run/astra.pid | xargs ps -p
-# 3. конфиг валиден?
-cat /etc/astra/astra.lua
-# 4. логи
-journalctl -u astra-api -n 50
-```
-
-### SKILL: systemd-setup
-```ini
-# /etc/systemd/system/astra-api.service
-[Unit]
-Description=Astra API Bridge
-After=network.target
-
-[Service]
-ExecStart=/usr/local/bin/astra-api --port 8000 --login admin --password admin
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-```
-```bash
-systemctl daemon-reload && systemctl enable --now astra-api
+cd /home/ilya/astra/astra/modules/inscript && rm -f inscript.h && make
+cd /home/ilya/astra/astra && make -j$(nproc)
+cp astra /usr/bin/astra
 ```
 
 ---
 
-## Правила для Claude Code (экономия токенов)
+## Web UI возможности
+- **Dashboard**: статус Online/Offline, CPU/Memory/Uptime, список стримов с live битрейтом
+- **Streams**: CRUD, stop/start/restart каждого стрима, live статус (зелёная/красная точка)
+  - Форма создания: построитель Output URL (тип + интерфейс + адрес + порт)
+  - Выбор CAM для зашифрованных каналов
+- **Adapters**: CRUD, сканирование транспондера, live Signal/SNR индикатор (обновление 3с)
+- **NewCamd**: CRUD серверов (host, port, user, pass, DES key, timeout, disable_emm)
+- **Log**: кольцевой буфер 1000 строк из stdout/stderr astra
 
-- Не читай весь файл если нужна одна функция — используй grep
-- Не объясняй что делаешь — просто делай
-- Ошибки компиляции — исправляй без вопросов
-- Тесты — только curl команды, не писать Go тесты
-- Комментарии в коде — только на конвертации Lua↔JSON
+---
 
 ## Минимальные промты для типичных задач
 
 | Задача | Промт |
 |--------|-------|
-| Добавить стрим | `add stream name=X input=udp://... output=http://...` |
-| Список стримов | `list streams` |
+| Добавить стрим | `add stream name=X input=dvb://N#pnr=Y output=udp://iface@addr:port` |
+| Добавить CAM | `add newcamd host=X port=Y user=Z pass=W key=HEX` |
 | Рестарт Astra | `restart astra` |
-| Проверить связку | `test astraflow→astra-api` |
 | Новый эндпоинт | `add endpoint GET /api/X → returns {...}` |
 | Починить ошибку | `fix: {текст ошибки}` |
+| Пересобрать astra | `rebuild astra on server` |
 
-## Приоритет реализации
-1. `main.go` + `auth.go` + HTTP сервер
-2. `control.go` → version, load, upload, restart
-3. `config.go` → JSON↔Lua
-4. `process.go` → управление процессом astra
-5. `api.go` → system-status, stream-status
-6. Systemd сервис
+## Правила для Claude Code
+
+- Не читай весь файл если нужна одна функция — используй grep
+- Не объясняй что делаешь — просто делай
+- Ошибки компиляции — исправляй без вопросов
+- Тесты — только curl команды, не писать Go тесты
+- После изменения stream.lua — пересобирать: `rm inscript.h && make` в modules/inscript, затем `make` в корне astra
+- Бинарник astra в репо не коммитить если собирали на dev машине с новым glibc
