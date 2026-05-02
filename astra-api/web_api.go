@@ -37,15 +37,20 @@ func genID(prefix string) string {
 func handleStreamsAPI(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/")
 
+	id := idFromPath(path, "streams")
+	rest := strings.TrimPrefix(path, "streams/"+id)
+
 	switch {
 	case path == "streams" && r.Method == http.MethodGet:
 		streamsListHandler(w, r)
 	case path == "streams" && r.Method == http.MethodPost:
 		streamsCreateHandler(w, r)
+	case strings.HasPrefix(path, "streams/") && rest == "/restart":
+		streamsRestartHandler(w, r, id)
 	case strings.HasPrefix(path, "streams/") && r.Method == http.MethodPut:
-		streamsUpdateHandler(w, r, idFromPath(path, "streams"))
+		streamsUpdateHandler(w, r, id)
 	case strings.HasPrefix(path, "streams/") && r.Method == http.MethodDelete:
-		streamsDeleteHandler(w, r, idFromPath(path, "streams"))
+		streamsDeleteHandler(w, r, id)
 	default:
 		http.Error(w, "not found", 404)
 	}
@@ -89,6 +94,53 @@ func streamsCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	go restartAstra()
 	writeJSON(w, 200, map[string]any{"status": true, "id": id})
+}
+
+func streamsRestartHandler(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST required", 405)
+		return
+	}
+	cfg, err := loadConfig()
+	if err != nil {
+		jsonError(w, err.Error(), 500)
+		return
+	}
+	streams := ensureStreams(cfg)
+	s, ok := streams[id]
+	if !ok {
+		jsonError(w, "stream not found", 404)
+		return
+	}
+
+	action := "restart"
+	if r.URL.Query().Get("action") != "" {
+		action = r.URL.Query().Get("action")
+	}
+
+	sm, _ := s.(map[string]any)
+	switch action {
+	case "stop":
+		sm["enable"] = false
+	case "start":
+		sm["enable"] = true
+	default: // restart
+		sm["enable"] = false
+		if err := saveConfig(cfg); err != nil {
+			jsonError(w, err.Error(), 500)
+			return
+		}
+		_ = restartAstra()
+		time.Sleep(500 * time.Millisecond)
+		sm["enable"] = true
+	}
+	streams[id] = sm
+	if err := saveConfig(cfg); err != nil {
+		jsonError(w, err.Error(), 500)
+		return
+	}
+	go restartAstra()
+	ok200(w)
 }
 
 func streamsUpdateHandler(w http.ResponseWriter, r *http.Request, id string) {

@@ -52,6 +52,9 @@ func main() {
 			return
 		}
 		switch {
+		case path == "streams-status":
+			w.Header().Set("Content-Type", "application/json")
+			handleStreamsStatus(w, r)
 		case path == "streams" || strings.HasPrefix(path, "streams/"):
 			handleStreamsAPI(w, r)
 		case path == "adapters" || strings.HasPrefix(path, "adapters/"):

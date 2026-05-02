@@ -121,6 +121,21 @@ tr:hover td{background:#fafbff}
 .svc-pnr{font-family:monospace;background:#f3f4f6;border-radius:4px;padding:2px 6px;font-size:12px;color:#555;min-width:50px;text-align:center}
 .svc-name{flex:1;font-size:13px}
 .svc-prov{font-size:11px;color:#9ca3af}
+
+/* Stream status */
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#d1d5db;flex-shrink:0}
+.dot.on{background:#22c55e;box-shadow:0 0 5px #22c55e88;animation:pulse 2s infinite}
+.dot.err{background:#ef4444}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+.bitrate{font-size:12px;font-family:monospace;color:#374151}
+.pes-err{font-size:12px;color:#ef4444;font-family:monospace}
+.stream-actions{display:flex;gap:3px;flex-wrap:nowrap}
+.btn-stop{padding:3px 8px;font-size:11px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;cursor:pointer}
+.btn-stop:hover{background:#fca5a5}
+.btn-start{padding:3px 8px;font-size:11px;background:#dcfce7;color:#16a34a;border:1px solid #86efac;border-radius:4px;cursor:pointer}
+.btn-start:hover{background:#bbf7d0}
+.btn-restart{padding:3px 8px;font-size:11px;background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:4px;cursor:pointer}
+.btn-restart:hover{background:#bfdbfe}
 </style>
 </head>
 <body>
@@ -162,7 +177,7 @@ tr:hover td{background:#fafbff}
         <div class="card-head"><h2>Streams</h2></div>
         <div class="card-body" style="padding:0">
           <table>
-            <thead><tr><th>Name</th><th>ID</th><th>Enable</th><th>Inputs</th><th>Outputs</th></tr></thead>
+            <thead><tr><th width="24"></th><th>Name</th><th>Bitrate</th><th>PES Err</th><th>Inputs</th></tr></thead>
             <tbody id="dash-streams"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
           </table>
         </div>
@@ -178,7 +193,7 @@ tr:hover td{background:#fafbff}
         </div>
         <div class="card-body" style="padding:0">
           <table>
-            <thead><tr><th>Name</th><th>ID</th><th>Type</th><th>Enable</th><th>Inputs</th><th>Outputs</th><th width="90">Actions</th></tr></thead>
+            <thead><tr><th width="24"></th><th>Name</th><th>Type</th><th>Bitrate</th><th>PES Err</th><th>Inputs</th><th>Actions</th></tr></thead>
             <tbody id="streams-tbody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
           </table>
         </div>
@@ -268,6 +283,7 @@ tr:hover td{background:#fafbff}
 let currentTab = 'dashboard';
 let modalCallback = null;
 let autoRefresh = null;
+let streamStatusCache = {};  // id → {on_air, bitrate, cc_error, pes_error}
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 document.querySelectorAll('#sidebar nav a').forEach(a => {
@@ -286,9 +302,13 @@ function switchTab(tab) {
   document.getElementById('page-title').textContent =
     {dashboard:'Dashboard',streams:'Streams',adapters:'Adapters',newcamd:'NewCamd',log:'Log'}[tab] || tab;
   clearInterval(autoRefresh);
-  if (tab === 'dashboard') { loadDashboard(); autoRefresh = setInterval(loadDashboard, 5000); }
-  else if (tab === 'streams') loadStreams();
-  else if (tab === 'adapters') loadAdapters();
+  if (tab === 'dashboard') {
+    loadDashboard();
+    autoRefresh = setInterval(loadDashboard, 5000);
+  } else if (tab === 'streams') {
+    loadStreams();
+    autoRefresh = setInterval(pollStreamsStatus, 3000);
+  } else if (tab === 'adapters') loadAdapters();
   else if (tab === 'newcamd') loadCams();
   else if (tab === 'log') loadLog();
 }
@@ -359,45 +379,101 @@ async function loadDashboard() {
     s('s-streams').querySelector('.val').textContent = streams.length || 0;
     s('s-adapters').querySelector('.val').textContent = adapters.length || 0;
 
+    let statusMap = {};
+    try { statusMap = await api('GET','streams-status'); } catch(e){}
+
     const tbody = document.getElementById('dash-streams');
     if (!streams.length) {
       tbody.innerHTML = '<tr><td colspan="5" class="empty">No streams configured</td></tr>';
     } else {
-      tbody.innerHTML = streams.map(s => `
-        <tr>
+      tbody.innerHTML = streams.map(s => {
+        const id = s._id || s.id || '';
+        const st = statusMap[id];
+        let dotCls = 'dot', bitrateStr = '—', pesStr = '—';
+        if (st) {
+          dotCls = 'dot ' + (st.on_air ? 'on' : 'err');
+          bitrateStr = st.on_air ? (st.bitrate || 0).toLocaleString() + ' Kb/s' : 'No signal';
+          pesStr = st.pes_error ? String(st.pes_error) : (st.on_air ? '0' : '—');
+        }
+        return `<tr>
+          <td><span class="${dotCls}"></span></td>
           <td><b>${esc(s.name||'')}</b></td>
-          <td style="color:#888;font-size:12px">${esc(s._id||s.id||'')}</td>
-          <td>${badge(bool(s.enable))}</td>
+          <td class="bitrate">${bitrateStr}</td>
+          <td>${pesStr}</td>
           <td>${arrLen(s.input)}</td>
-          <td>${arrLen(s.output)}</td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
     }
   } catch(e) { console.error(e); }
 }
 
 // ── Streams ────────────────────────────────────────────────────────────────
+let streamsData = [];
+
 async function loadStreams() {
   try {
-    const list = await api('GET','streams');
-    const tbody = document.getElementById('streams-tbody');
-    if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">No streams — click Add Stream</td></tr>';
-      return;
-    }
-    tbody.innerHTML = list.map(s => `
-      <tr>
-        <td><b>${esc(s.name||'')}</b></td>
-        <td style="color:#888;font-size:11px">${esc(s._id||s.id||'')}</td>
-        <td><span class="badge badge-blue">${esc(s.type||'spts')}</span></td>
-        <td>${badge(bool(s.enable))}</td>
-        <td>${arrLen(s.input)}</td>
-        <td>${arrLen(s.output)}</td>
-        <td>
-          <button class="btn-icon" title="Edit" onclick='openStreamModal(${JSON.stringify(s)})'>✏️</button>
-          <button class="btn-icon" title="Delete" onclick="deleteStream('${esc(s._id||s.id||'')}')">🗑️</button>
-        </td>
-      </tr>`).join('');
+    streamsData = await api('GET','streams');
+    renderStreams();
+    pollStreamsStatus();
   } catch(e) { toast(e.message,true); }
+}
+
+async function pollStreamsStatus() {
+  try {
+    streamStatusCache = await api('GET','streams-status');
+    renderStreams();
+  } catch(e) {}
+}
+
+function renderStreams() {
+  const tbody = document.getElementById('streams-tbody');
+  if (!tbody) return;
+  if (!streamsData.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">No streams — click Add Stream</td></tr>';
+    return;
+  }
+  tbody.innerHTML = streamsData.map(s => {
+    const id  = s._id || s.id || '';
+    const st  = streamStatusCache[id];
+    const enabled = bool(s.enable);
+    let dotCls = 'dot';
+    let bitrateStr = '—';
+    let pesStr = '—';
+    if (st) {
+      dotCls = 'dot ' + (st.on_air ? 'on' : 'err');
+      bitrateStr = st.on_air ? (st.bitrate ? st.bitrate.toLocaleString() + ' Kb/s' : '0 Kb/s') : '<span style="color:#ef4444">No signal</span>';
+      pesStr = st.pes_error ? `<span class="pes-err">${st.pes_error}</span>` : (st.on_air ? '0' : '—');
+    } else if (!enabled) {
+      dotCls = 'dot';
+    }
+    return `<tr data-id="${esc(id)}">
+      <td><span class="${dotCls}"></span></td>
+      <td><b>${esc(s.name||'')}</b><br><span style="color:#aaa;font-size:10px">${esc(id)}</span></td>
+      <td><span class="badge badge-blue">${esc(s.type||'spts')}</span></td>
+      <td class="bitrate">${bitrateStr}</td>
+      <td>${pesStr}</td>
+      <td>${arrLen(s.input)}</td>
+      <td>
+        <div class="stream-actions">
+          <button class="btn-stop" title="Stop" onclick="streamAction('${esc(id)}','stop')">■</button>
+          <button class="btn-start" title="Start" onclick="streamAction('${esc(id)}','start')">▶</button>
+          <button class="btn-restart" title="Restart" onclick="streamAction('${esc(id)}','restart')">↺</button>
+          <button class="btn-icon" title="Edit" onclick='openStreamModal(${JSON.stringify(s)})'>✏️</button>
+          <button class="btn-icon" title="Delete" onclick="deleteStream('${esc(id)}')">🗑️</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function streamAction(id, action) {
+  const labels = {stop:'Stopping…', start:'Starting…', restart:'Restarting…'};
+  toast(labels[action] || action + '…');
+  try {
+    await api('POST', 'streams/' + id + '/restart?action=' + action);
+    toast(action.charAt(0).toUpperCase() + action.slice(1) + ' OK');
+    setTimeout(pollStreamsStatus, 1500);
+  } catch(e) { toast(e.message, true); }
 }
 
 function openStreamModal(s={}) {
@@ -636,7 +712,7 @@ async function scanAdapter(id) {
   const overlay = document.getElementById('scan-overlay');
   document.getElementById('scan-title').textContent = 'Scanning transponder…';
   document.getElementById('scan-body').innerHTML =
-    '<div class="scan-info"><span class="spinner"></span>Scanning… please wait up to 25 seconds</div>';
+    '<div class="scan-info"><span class="spinner"></span>Scanning… please wait up to 40 seconds</div>';
   overlay.classList.add('show');
 
   try {

@@ -314,20 +314,59 @@ func handleStreamStatus(w http.ResponseWriter, _ *http.Request, id string) {
 	}
 	s, _ := stream.(map[string]any)
 	inputs, _ := s["input"].([]any)
+
+	bitrate, ccErr, pesErr, onAir := 0, 0, 0, false
+	if stat := getStatByID(id); stat != nil {
+		bitrate = stat.Bitrate
+		ccErr = stat.CCErr
+		pesErr = stat.PESErr
+		onAir = stat.OnAir
+	}
+
 	inputStatus := map[string]any{
-		"bitrate":   0,
-		"cc_error":  0,
-		"pes_error": 0,
+		"bitrate":   bitrate,
+		"cc_error":  ccErr,
+		"pes_error": pesErr,
+		"on_air":    onAir,
 	}
 	if len(inputs) > 0 {
 		inputStatus["url"] = inputs[0]
 	}
 	json.NewEncoder(w).Encode(map[string]any{
 		"id":        id,
-		"bitrate":   0,
-		"cc_error":  0,
-		"pes_error": 0,
+		"bitrate":   bitrate,
+		"cc_error":  ccErr,
+		"pes_error": pesErr,
+		"on_air":    onAir,
 		"input":     inputStatus,
 		"output":    []any{},
 	})
+}
+
+func handleStreamsStatus(w http.ResponseWriter, _ *http.Request) {
+	cfg, err := loadConfig()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	streams, _ := cfg["streams"].(map[string]any)
+	result := map[string]any{}
+	for id, v := range streams {
+		s, _ := v.(map[string]any)
+		name, _ := s["name"].(string)
+		bitrate, ccErr, pesErr, onAir := 0, 0, 0, false
+		if stat := getStatByName(name); stat != nil {
+			bitrate = stat.Bitrate
+			ccErr = stat.CCErr
+			pesErr = stat.PESErr
+			onAir = stat.OnAir
+		}
+		result[id] = map[string]any{
+			"on_air":    onAir,
+			"bitrate":   bitrate,
+			"cc_error":  ccErr,
+			"pes_error": pesErr,
+		}
+	}
+	json.NewEncoder(w).Encode(result)
 }
