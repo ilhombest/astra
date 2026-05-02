@@ -490,12 +490,12 @@ async function openStreamModal(s={}) {
         <option value="mpts" ${s.type==='mpts'?'selected':''}>MPTS</option>
       </select>
     </div>
+    <div class="form-row"><label>CAM / Softcam <span style="font-weight:400;color:#9ca3af">(for encrypted channels)</span></label>
+      <select id="f-cam">${camOpts}</select></div>
     <div class="form-row"><label>Input URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
       <textarea id="f-input" rows="3">${esc(inputs)}</textarea></div>
     <div class="form-row"><label>Output URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
       <textarea id="f-output" rows="3">${esc(outputs)}</textarea></div>
-    <div class="form-row"><label>CAM / Softcam <span style="font-weight:400;color:#9ca3af">(for encrypted channels)</span></label>
-      <select id="f-cam">${camOpts}</select></div>
     <div class="form-row"><label>BISS Key <span style="font-weight:400;color:#9ca3af">(16 or 32 hex chars, optional)</span></label>
       <input id="f-biss" value="${esc(s.biss||'')}" placeholder="e.g. 1122334455667700"></div>
   `;
