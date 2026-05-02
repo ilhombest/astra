@@ -473,14 +473,11 @@ async function streamAction(id, action) {
   } catch(e) { toast(e.message, true); }
 }
 
-async function openStreamModal(s={}) {
+function openStreamModal(s={}) {
   const id = s._id || s.id || '';
   const isEdit = !!id;
   const inputs  = (s.input  || []).join('\n');
   const outputs = (s.output || []).join('\n');
-  const cams = await api('GET','cams').catch(()=>[]);
-  const camOpts = '<option value="">— None —</option>' +
-    cams.map(c => `<option value="${esc(c._id)}" ${s.cam===c._id?'selected':''}>${esc(c.name||c._id)}</option>`).join('');
   const html = `
     <div class="form-row"><label>Name *</label><input id="f-name" value="${esc(s.name||'')}"></div>
     <div class="form-row form-check"><input type="checkbox" id="f-enable" ${bool(s.enable)!==false?'checked':''}><label for="f-enable">Enabled</label></div>
@@ -491,7 +488,7 @@ async function openStreamModal(s={}) {
       </select>
     </div>
     <div class="form-row"><label>CAM / Softcam <span style="font-weight:400;color:#9ca3af">(for encrypted channels)</span></label>
-      <select id="f-cam">${camOpts}</select></div>
+      <select id="f-cam"><option value="">Loading…</option></select></div>
     <div class="form-row"><label>Input URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
       <textarea id="f-input" rows="3">${esc(inputs)}</textarea></div>
     <div class="form-row"><label>Output URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
@@ -499,6 +496,18 @@ async function openStreamModal(s={}) {
     <div class="form-row"><label>BISS Key <span style="font-weight:400;color:#9ca3af">(16 or 32 hex chars, optional)</span></label>
       <input id="f-biss" value="${esc(s.biss||'')}" placeholder="e.g. 1122334455667700"></div>
   `;
+  // populate cams async after modal is open
+  api('GET','cams').then(list => {
+    const sel = document.getElementById('f-cam');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— None —</option>' +
+      (Array.isArray(list) ? list : []).map(c =>
+        `<option value="${esc(c._id)}" ${s.cam===c._id?'selected':''}>${esc(c.name||c._id)}</option>`
+      ).join('');
+  }).catch(() => {
+    const sel = document.getElementById('f-cam');
+    if (sel) sel.innerHTML = '<option value="">— None —</option>';
+  });
   openModal(isEdit ? 'Edit Stream' : 'Add Stream', html, async () => {
     const name = document.getElementById('f-name').value.trim();
     if (!name) throw new Error('Name is required');
