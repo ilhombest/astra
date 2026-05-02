@@ -390,7 +390,8 @@ async function loadDashboard() {
         const id = s._id || s.id || '';
         const st = statusMap[id];
         let dotCls = 'dot', bitrateStr = '—', pesStr = '—';
-        if (st) {
+        const hasData = st && st.on_air !== null && st.on_air !== undefined;
+        if (hasData) {
           dotCls = 'dot ' + (st.on_air ? 'on' : 'err');
           bitrateStr = st.on_air ? (st.bitrate || 0).toLocaleString() + ' Kb/s' : 'No signal';
           pesStr = st.pes_error ? String(st.pes_error) : (st.on_air ? '0' : '—');
@@ -435,16 +436,12 @@ function renderStreams() {
   tbody.innerHTML = streamsData.map(s => {
     const id  = s._id || s.id || '';
     const st  = streamStatusCache[id];
-    const enabled = bool(s.enable);
-    let dotCls = 'dot';
-    let bitrateStr = '—';
-    let pesStr = '—';
-    if (st) {
+    let dotCls = 'dot', bitrateStr = '—', pesStr = '—';
+    const hasData = st && st.on_air !== null && st.on_air !== undefined;
+    if (hasData) {
       dotCls = 'dot ' + (st.on_air ? 'on' : 'err');
       bitrateStr = st.on_air ? (st.bitrate ? st.bitrate.toLocaleString() + ' Kb/s' : '0 Kb/s') : '<span style="color:#ef4444">No signal</span>';
       pesStr = st.pes_error ? `<span class="pes-err">${st.pes_error}</span>` : (st.on_air ? '0' : '—');
-    } else if (!enabled) {
-      dotCls = 'dot';
     }
     return `<tr data-id="${esc(id)}">
       <td><span class="${dotCls}"></span></td>

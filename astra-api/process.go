@@ -90,6 +90,40 @@ func captureProcess(cmd *exec.Cmd) {
 
 // ── process management ────────────────────────────────────────────
 
+// attachOrStartAstra is called once on startup.
+// If astra is already running (pidfile + process alive), restart it through
+// astra-api so its output is captured in the log ring buffer.
+// If not running, start it fresh.
+func attachOrStartAstra() {
+	time.Sleep(500 * time.Millisecond) // let HTTP server start first
+	pid, err := readPID()
+	if err != nil {
+		addLog("info", "astra not running, starting…")
+		if err := startAstra(); err != nil {
+			addLog("error", "failed to start astra: "+err.Error())
+		}
+		return
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil || proc.Signal(syscall.Signal(0)) != nil {
+		addLog("info", "stale pidfile, starting astra…")
+		_ = os.Remove(*flagPidFile)
+		if err := startAstra(); err != nil {
+			addLog("error", "failed to start astra: "+err.Error())
+		}
+		return
+	}
+	// astra is running but not captured — restart to capture logs
+	addLog("info", fmt.Sprintf("astra running (pid=%d), restarting to capture logs…", pid))
+	if err := stopAstra(); err != nil {
+		addLog("error", "stop failed: "+err.Error())
+	}
+	time.Sleep(800 * time.Millisecond)
+	if err := startAstra(); err != nil {
+		addLog("error", "failed to restart astra: "+err.Error())
+	}
+}
+
 func restartAstra() error {
 	pid, err := readPID()
 	if err != nil {

@@ -24,6 +24,7 @@ var uiHTML string
 func main() {
 	flag.Parse()
 	initLogger()
+	go attachOrStartAstra()
 
 	mux := http.NewServeMux()
 

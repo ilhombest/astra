@@ -354,18 +354,16 @@ func handleStreamsStatus(w http.ResponseWriter, _ *http.Request) {
 	for id, v := range streams {
 		s, _ := v.(map[string]any)
 		name, _ := s["name"].(string)
-		bitrate, ccErr, pesErr, onAir := 0, 0, 0, false
 		if stat := getStatByName(name); stat != nil {
-			bitrate = stat.Bitrate
-			ccErr = stat.CCErr
-			pesErr = stat.PESErr
-			onAir = stat.OnAir
-		}
-		result[id] = map[string]any{
-			"on_air":    onAir,
-			"bitrate":   bitrate,
-			"cc_error":  ccErr,
-			"pes_error": pesErr,
+			result[id] = map[string]any{
+				"on_air":    stat.OnAir,
+				"bitrate":   stat.Bitrate,
+				"cc_error":  stat.CCErr,
+				"pes_error": stat.PESErr,
+			}
+		} else {
+			// null on_air means no monitoring data yet
+			result[id] = map[string]any{"on_air": nil}
 		}
 	}
 	json.NewEncoder(w).Encode(result)
