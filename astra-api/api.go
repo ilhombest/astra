@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -312,6 +313,26 @@ func handleStreamStatus(w http.ResponseWriter, _ *http.Request, id string) {
 		"input":     inputStatus,
 		"output":    []any{},
 	})
+}
+
+func handleInterfaces(w http.ResponseWriter, _ *http.Request) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var names []string
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue // skip loopback
+		}
+		if iface.Flags&net.FlagUp == 0 {
+			continue // skip down interfaces
+		}
+		names = append(names, iface.Name)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(names)
 }
 
 func handleStreamsStatus(w http.ResponseWriter, _ *http.Request) {

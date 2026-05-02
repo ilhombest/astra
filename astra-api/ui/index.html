@@ -491,12 +491,34 @@ function openStreamModal(s={}) {
       <select id="f-cam"><option value="">Loading…</option></select></div>
     <div class="form-row"><label>Input URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
       <textarea id="f-input" rows="3">${esc(inputs)}</textarea></div>
-    <div class="form-row"><label>Output URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
-      <textarea id="f-output" rows="3">${esc(outputs)}</textarea></div>
+    <div class="form-row">
+      <label>Output URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
+      <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+        <select id="f-out-type" style="width:80px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">
+          <option>udp</option><option>rtp</option><option>http</option>
+        </select>
+        <select id="f-out-iface" style="flex:1;min-width:100px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">
+          <option value="">Loading…</option>
+        </select>
+        <input id="f-out-addr" placeholder="239.x.x.x" style="flex:2;min-width:120px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">
+        <input id="f-out-port" placeholder="1234" type="number" style="width:72px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addOutputUrl()">+ Add</button>
+      </div>
+      <textarea id="f-output" rows="3">${esc(outputs)}</textarea>
+    </div>
     <div class="form-row"><label>BISS Key <span style="font-weight:400;color:#9ca3af">(16 or 32 hex chars, optional)</span></label>
       <input id="f-biss" value="${esc(s.biss||'')}" placeholder="e.g. 1122334455667700"></div>
   `;
-  // populate cams async after modal is open
+  // populate cams and interfaces async after modal is open
+  api('GET','interfaces').then(list => {
+    const sel = document.getElementById('f-out-iface');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— no iface —</option>' +
+      (Array.isArray(list) ? list : []).map(n => `<option>${esc(n)}</option>`).join('');
+  }).catch(() => {
+    const sel = document.getElementById('f-out-iface');
+    if (sel) sel.innerHTML = '<option value="">— no iface —</option>';
+  });
   api('GET','cams').then(list => {
     const sel = document.getElementById('f-cam');
     if (!sel) return;
@@ -526,6 +548,19 @@ function openStreamModal(s={}) {
     else        { await api('POST','streams', body);    toast('Stream created'); }
     loadStreams();
   });
+}
+
+function addOutputUrl() {
+  const type  = document.getElementById('f-out-type').value;
+  const iface = document.getElementById('f-out-iface').value.trim();
+  const addr  = document.getElementById('f-out-addr').value.trim();
+  const port  = document.getElementById('f-out-port').value.trim() || '1234';
+  if (!addr) { toast('Enter output address', true); return; }
+  const host = iface ? `${iface}@${addr}` : addr;
+  const url  = `${type}://${host}:${port}`;
+  const ta = document.getElementById('f-output');
+  ta.value = ta.value ? ta.value.trimEnd() + '\n' + url : url;
+  document.getElementById('f-out-addr').value = '';
 }
 
 async function deleteStream(id) {

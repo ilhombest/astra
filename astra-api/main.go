@@ -62,6 +62,8 @@ func main() {
 			handleAdaptersAPI(w, r)
 		case path == "cams" || strings.HasPrefix(path, "cams/"):
 			handleCamsAPI(w, r)
+		case path == "interfaces":
+			handleInterfaces(w, r)
 		default:
 			handleAPI(w, r)
 		}
