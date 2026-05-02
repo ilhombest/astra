@@ -111,7 +111,7 @@ function on_analyze_spts(channel_data, input_id, data)
         -- periodic status log for external monitoring (every ~30s)
         if not input_data.stat_tick then input_data.stat_tick = 0 end
         input_data.stat_tick = input_data.stat_tick + 1
-        if input_data.stat_tick >= 30 then
+        if input_data.stat_tick >= 3 then
             input_data.stat_tick = 0
             if input_data.on_air == true then
                 log.info("[" .. input_data.config.name .. "] Bitrate:" .. data.total.bitrate .. "Kbit/s")
