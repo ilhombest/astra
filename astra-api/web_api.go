@@ -113,32 +113,27 @@ func streamsRestartHandler(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	action := "restart"
-	if r.URL.Query().Get("action") != "" {
-		action = r.URL.Query().Get("action")
-	}
-
+	action := r.URL.Query().Get("action")
 	sm, _ := s.(map[string]any)
+
 	switch action {
 	case "stop":
 		sm["enable"] = false
-	case "start":
-		sm["enable"] = true
-	default: // restart
-		sm["enable"] = false
+		streams[id] = sm
 		if err := saveConfig(cfg); err != nil {
 			jsonError(w, err.Error(), 500)
 			return
 		}
-		_ = restartAstra()
-		time.Sleep(500 * time.Millisecond)
+	case "start":
 		sm["enable"] = true
+		streams[id] = sm
+		if err := saveConfig(cfg); err != nil {
+			jsonError(w, err.Error(), 500)
+			return
+		}
+	default: // restart — just reload astra with current config
 	}
-	streams[id] = sm
-	if err := saveConfig(cfg); err != nil {
-		jsonError(w, err.Error(), 500)
-		return
-	}
+
 	go restartAstra()
 	ok200(w)
 }

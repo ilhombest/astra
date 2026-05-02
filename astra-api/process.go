@@ -124,20 +124,14 @@ func attachOrStartAstra() {
 	}
 }
 
+// restartAstra does a full stop+start so the Lua config is fully reloaded.
+// SIGHUP in this astra version does not re-read the Lua script.
 func restartAstra() error {
-	pid, err := readPID()
-	if err != nil {
-		return startAstra()
+	if err := stopAstra(); err != nil {
+		addLog("error", "stop failed: "+err.Error())
 	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return startAstra()
-	}
-	if err := proc.Signal(syscall.Signal(0)); err != nil {
-		return startAstra()
-	}
-	addLog("info", fmt.Sprintf("sending SIGHUP to astra pid=%d", pid))
-	return proc.Signal(syscall.SIGHUP)
+	time.Sleep(600 * time.Millisecond)
+	return startAstra()
 }
 
 func startAstra() error {
