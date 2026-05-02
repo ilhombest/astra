@@ -88,6 +88,56 @@ func captureProcess(cmd *exec.Cmd) {
 	}()
 }
 
+// ── process tracking ─────────────────────────────────────────────
+
+var (
+	astraProc   *os.Process
+	astraProcMu sync.Mutex
+	astraStart  time.Time
+)
+
+func setAstraProc(p *os.Process) {
+	astraProcMu.Lock()
+	astraProc = p
+	astraStart = time.Now()
+	astraProcMu.Unlock()
+}
+
+func isAstraAlive() bool {
+	astraProcMu.Lock()
+	p := astraProc
+	astraProcMu.Unlock()
+	if p != nil {
+		if p.Signal(syscall.Signal(0)) == nil {
+			return true
+		}
+	}
+	// fallback: pidfile
+	pid, err := readPID()
+	if err != nil {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return proc.Signal(syscall.Signal(0)) == nil
+}
+
+func astraUptimeMin() int {
+	astraProcMu.Lock()
+	p := astraProc
+	t := astraStart
+	astraProcMu.Unlock()
+	if p == nil || !t.IsZero() == false {
+		return 0
+	}
+	if p.Signal(syscall.Signal(0)) != nil {
+		return 0
+	}
+	return int(time.Since(t).Minutes())
+}
+
 // ── process management ────────────────────────────────────────────
 
 // attachOrStartAstra is called once on startup.
@@ -148,11 +198,17 @@ func startAstra() error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start astra: %w", err)
 	}
+	setAstraProc(cmd.Process)
 	addLog("info", fmt.Sprintf("astra started pid=%d", cmd.Process.Pid))
 	go func() {
 		if err := cmd.Wait(); err != nil {
 			addLog("error", fmt.Sprintf("astra exited: %v", err))
 		}
+		astraProcMu.Lock()
+		if astraProc == cmd.Process {
+			astraProc = nil
+		}
+		astraProcMu.Unlock()
 	}()
 	return nil
 }

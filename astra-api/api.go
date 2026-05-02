@@ -203,37 +203,8 @@ func handleSystemStatus(w http.ResponseWriter, _ *http.Request) {
 	appMemKB := astraProcMemKB()
 	appCPU := astraAppCPU()
 
-	pid, _ := readPID()
-	uptimeMin := 0
-	if pid > 0 {
-		if data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid)); err == nil {
-			// field 22 = starttime in clock ticks since system boot
-			s := string(data)
-			end := strings.LastIndex(s, ")")
-			if end >= 0 {
-				fields := strings.Fields(s[end+2:])
-				if len(fields) >= 20 {
-					startTicks, _ := strconv.ParseUint(fields[19], 10, 64)
-					bootData, _ := os.ReadFile("/proc/uptime")
-					var bootSec float64
-					fmt.Sscanf(string(bootData), "%f", &bootSec)
-					procStartSec := float64(startTicks) / 100.0
-					runSec := bootSec - procStartSec
-					if runSec > 0 {
-						uptimeMin = int(runSec / 60)
-					}
-				}
-			}
-		}
-	}
-
-	// check astra online
-	isOnline := false
-	if pid > 0 {
-		if proc, err := os.FindProcess(pid); err == nil {
-			isOnline = proc.Signal(syscall.Signal(0)) == nil
-		}
-	}
+	isOnline := isAstraAlive()
+	uptimeMin := astraUptimeMin()
 	if !isOnline {
 		appCPU = 0
 		appMemKB = 0

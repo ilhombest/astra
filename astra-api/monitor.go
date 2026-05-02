@@ -73,12 +73,17 @@ func parseStatLine(msg string) {
 	streamStatsMu.Unlock()
 }
 
-// getStatByName returns the latest stat for a stream name, nil if stale/unknown.
+// getStatByName returns the latest stat for a stream name.
+// on_air=true states are kept indefinitely (astra only logs on state change).
+// on_air=false states expire after 2 minutes (stream may have recovered).
 func getStatByName(name string) *StreamStat {
 	streamStatsMu.RLock()
 	defer streamStatsMu.RUnlock()
 	s, ok := streamStats[name]
-	if !ok || time.Since(s.Updated) > 30*time.Second {
+	if !ok {
+		return nil
+	}
+	if !s.OnAir && time.Since(s.Updated) > 2*time.Minute {
 		return nil
 	}
 	return s
