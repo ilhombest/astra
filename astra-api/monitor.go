@@ -20,7 +20,8 @@ var (
 	streamStats   = map[string]*StreamStat{}
 	streamStatsMu sync.RWMutex
 
-	reBitrate = regexp.MustCompile(`\[(.+?)\] Bitrate:(\d+)Kbit/s`)
+	reBitrate  = regexp.MustCompile(`\[(.+?)\] Bitrate:(\d+)Kbit/s`)
+	reInputSfx = regexp.MustCompile(` #\d+$`)
 	reCC      = regexp.MustCompile(`CC:(\d+)`)
 	rePES     = regexp.MustCompile(`PES:(\d+)`)
 )
@@ -47,7 +48,7 @@ func parseStatLine(msg string) {
 	if m == nil {
 		return
 	}
-	name := m[1]
+	name := reInputSfx.ReplaceAllString(m[1], "")
 	bitrate, _ := strconv.Atoi(m[2])
 
 	offAir := strings.Contains(msg, "PES:") || strings.Contains(msg, "CC:") || strings.Contains(msg, "Scrambled")
