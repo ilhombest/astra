@@ -127,6 +127,13 @@ tr:hover td{background:#fafbff}
 .dot.on{background:#22c55e;box-shadow:0 0 5px #22c55e88;animation:pulse 2s infinite}
 .dot.err{background:#ef4444}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+
+/* Signal bar */
+.sig-bar{display:inline-flex;align-items:flex-end;gap:2px;height:14px;vertical-align:middle}
+.sig-bar span{width:4px;border-radius:1px;background:#d1d5db}
+.sig-bar.lock span{background:#22c55e}
+.sig-bar.warn span{background:#f59e0b}
+.sig-pct{font-size:11px;color:#555;margin-left:4px;vertical-align:middle}
 .bitrate{font-size:12px;font-family:monospace;color:#374151}
 .pes-err{font-size:12px;color:#ef4444;font-family:monospace}
 .stream-actions{display:flex;gap:3px;flex-wrap:nowrap}
@@ -209,8 +216,8 @@ tr:hover td{background:#fafbff}
         </div>
         <div class="card-body" style="padding:0">
           <table>
-            <thead><tr><th>Adapter</th><th>Type</th><th>Frequency</th><th>Pol/BW</th><th>Symbol Rate</th><th>Enabled</th><th width="90">Actions</th></tr></thead>
-            <tbody id="adapters-tbody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+            <thead><tr><th>Adapter</th><th>Type</th><th>Frequency</th><th>Pol/BW</th><th>Symbol Rate</th><th>Signal</th><th>SNR</th><th>Enabled</th><th width="90">Actions</th></tr></thead>
+            <tbody id="adapters-tbody"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -308,8 +315,8 @@ function switchTab(tab) {
   } else if (tab === 'streams') {
     loadStreams();
     autoRefresh = setInterval(pollStreamsStatus, 3000);
-  } else if (tab === 'adapters') loadAdapters();
-  else if (tab === 'newcamd') loadCams();
+  } else if (tab === 'adapters') { if (adapterPollTimer) { clearTimeout(adapterPollTimer); adapterPollTimer = null; } loadAdapters(); }
+  else if (tab === 'newcamd') { if (adapterPollTimer) { clearTimeout(adapterPollTimer); adapterPollTimer = null; } loadCams(); }
   else if (tab === 'log') loadLog();
 }
 
@@ -570,25 +577,39 @@ async function deleteStream(id) {
 }
 
 // ── Adapters ───────────────────────────────────────────────────────────────
+let adapterList = [];
+let adapterPollTimer = null;
+
+function sigBar(pct, lock) {
+  const cls = lock ? 'lock' : (pct > 30 ? 'warn' : '');
+  const bars = [25,50,75,100].map(t =>
+    `<span style="height:${Math.round(14*t/100)}px;opacity:${pct>=t?1:0.2}"></span>`
+  ).join('');
+  return `<span class="sig-bar ${cls}">${bars}</span><span class="sig-pct">${pct}%</span>`;
+}
+
 async function loadAdapters() {
   try {
-    const list = await api('GET','adapters');
+    adapterList = await api('GET','adapters');
     const tbody = document.getElementById('adapters-tbody');
-    if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">No adapters — click Add Adapter</td></tr>';
+    if (!adapterList.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="empty">No adapters — click Add Adapter</td></tr>';
       return;
     }
-    tbody.innerHTML = list.map(a => {
+    tbody.innerHTML = adapterList.map(a => {
       const isSat = /S2?$/.test(a.dvb_type||'S2');
       const pol   = isSat ? esc(str(a.polarization)) : '';
       const bw    = !isSat ? esc(str(a.bandwidth))+'MHz' : '';
       const sr    = isSat ? num(a.symbolrate).toLocaleString() : '';
-      return `<tr>
-        <td>adapter<b>${str(a.adapter,'?')}</b>${a.device?'/dev'+a.device:''}</td>
+      const adN   = str(a.adapter,'0'), devN = str(a.device,'0');
+      return `<tr id="arow-${adN}-${devN}">
+        <td>adapter<b>${adN}</b>${a.device?'/dev'+a.device:''}</td>
         <td><span class="badge badge-blue">${esc(a.dvb_type||'DVB-S2')}</span></td>
         <td>${num(a.frequency).toLocaleString()} kHz</td>
         <td>${pol||bw||'—'}</td>
         <td>${sr ? sr+' kBd' : '—'}</td>
+        <td id="asig-${adN}-${devN}">—</td>
+        <td id="asnr-${adN}-${devN}">—</td>
         <td>${badge(bool(a.enabled)!==false)}</td>
         <td>
           <button class="btn-icon" title="Scan channels" onclick="scanAdapter('${esc(a._id||'')}')">📡</button>
@@ -597,7 +618,24 @@ async function loadAdapters() {
         </td>
       </tr>`;
     }).join('');
+    pollAdapterSignals();
   } catch(e) { toast(e.message,true); }
+}
+
+async function pollAdapterSignals() {
+  if (adapterPollTimer) clearTimeout(adapterPollTimer);
+  if (document.getElementById('tab-adapters').classList.contains('active')) {
+    for (const a of adapterList) {
+      const adN = str(a.adapter,'0'), devN = str(a.device,'0');
+      api('GET', `adapter-status/${adN}/${devN}`).then(s => {
+        const sigEl = document.getElementById(`asig-${adN}-${devN}`);
+        const snrEl = document.getElementById(`asnr-${adN}-${devN}`);
+        if (sigEl) sigEl.innerHTML = sigBar(s.signal||0, s.lock);
+        if (snrEl) snrEl.innerHTML = sigBar(s.snr||0, s.lock);
+      }).catch(()=>{});
+    }
+    adapterPollTimer = setTimeout(pollAdapterSignals, 3000);
+  }
 }
 
 function openAdapterModal(a={}) {
