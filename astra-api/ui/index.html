@@ -473,11 +473,14 @@ async function streamAction(id, action) {
   } catch(e) { toast(e.message, true); }
 }
 
-function openStreamModal(s={}) {
+async function openStreamModal(s={}) {
   const id = s._id || s.id || '';
   const isEdit = !!id;
   const inputs  = (s.input  || []).join('\n');
   const outputs = (s.output || []).join('\n');
+  const cams = await api('GET','cams').catch(()=>[]);
+  const camOpts = '<option value="">— None —</option>' +
+    cams.map(c => `<option value="${esc(c._id)}" ${s.cam===c._id?'selected':''}>${esc(c.name||c._id)}</option>`).join('');
   const html = `
     <div class="form-row"><label>Name *</label><input id="f-name" value="${esc(s.name||'')}"></div>
     <div class="form-row form-check"><input type="checkbox" id="f-enable" ${bool(s.enable)!==false?'checked':''}><label for="f-enable">Enabled</label></div>
@@ -491,6 +494,8 @@ function openStreamModal(s={}) {
       <textarea id="f-input" rows="3">${esc(inputs)}</textarea></div>
     <div class="form-row"><label>Output URLs <span style="font-weight:400;color:#9ca3af">(one per line)</span></label>
       <textarea id="f-output" rows="3">${esc(outputs)}</textarea></div>
+    <div class="form-row"><label>CAM / Softcam <span style="font-weight:400;color:#9ca3af">(for encrypted channels)</span></label>
+      <select id="f-cam">${camOpts}</select></div>
     <div class="form-row"><label>BISS Key <span style="font-weight:400;color:#9ca3af">(16 or 32 hex chars, optional)</span></label>
       <input id="f-biss" value="${esc(s.biss||'')}" placeholder="e.g. 1122334455667700"></div>
   `;
@@ -504,6 +509,8 @@ function openStreamModal(s={}) {
       input:  splitLines(document.getElementById('f-input').value),
       output: splitLines(document.getElementById('f-output').value),
     };
+    const cam  = document.getElementById('f-cam').value;
+    if (cam) body.cam = cam;
     const biss = document.getElementById('f-biss').value.trim();
     if (biss) body.biss = biss;
     if (isEdit) { await api('PUT','streams/'+id, body); toast('Stream updated'); }
@@ -674,6 +681,10 @@ function openCamModal(c={}) {
       <input id="f-key" value="${esc(c.key||'')}" placeholder="0102030405060708091011121314" maxlength="28">
       <div class="hint">Example: 0102030405060708091011121314</div>
     </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Timeout (sec)</label><input id="f-timeout" type="number" min="1" max="120" value="${str(c.timeout,'10')}"></div>
+      <div class="form-row form-check" style="align-self:flex-end;padding-bottom:4px"><input type="checkbox" id="f-disable-emm" ${c.disable_emm?'checked':''}><label for="f-disable-emm">Disable EMM</label></div>
+    </div>
   `;
   openModal(isEdit ? 'Edit NewCamd Server' : 'Add NewCamd Server', html, async () => {
     const host = document.getElementById('f-host').value.trim();
@@ -683,10 +694,12 @@ function openCamModal(c={}) {
     const body = {
       name: document.getElementById('f-name').value.trim() || host,
       host,
-      port: num(document.getElementById('f-port').value, 2222),
-      user: document.getElementById('f-user').value.trim(),
-      pass: document.getElementById('f-pass').value,
-      key:  key || '0102030405060708091011121314',
+      port:        num(document.getElementById('f-port').value, 2222),
+      user:        document.getElementById('f-user').value.trim(),
+      pass:        document.getElementById('f-pass').value,
+      key:         key || '0102030405060708091011121314',
+      timeout:     num(document.getElementById('f-timeout').value, 10),
+      disable_emm: document.getElementById('f-disable-emm').checked,
     };
     if (isEdit) { await api('PUT','cams/'+id, body); toast('Server updated'); }
     else        { await api('POST','cams', body);    toast('Server created'); }
