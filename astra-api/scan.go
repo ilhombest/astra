@@ -75,10 +75,10 @@ func handleScanAdapter(w http.ResponseWriter, r *http.Request, adapterID string)
 
 	addLog("info", fmt.Sprintf("[scan] adapter %s: starting scan", adapterID))
 
-	ctx, cancel := context.WithTimeout(r.Context(), 28*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, *flagAstraBin, "--stream", tmp.Name())
+	cmd := exec.CommandContext(ctx, *flagAstraBin, "--stream", tmp.Name(), "--debug")
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
@@ -97,7 +97,7 @@ func handleScanAdapter(w http.ResponseWriter, r *http.Request, adapterID string)
 
 	ticker := time.NewTicker(300 * time.Millisecond)
 	defer ticker.Stop()
-	deadline := time.After(25 * time.Second)
+	deadline := time.After(40 * time.Second)
 
 	sdtDone := false
 outer:
@@ -135,10 +135,18 @@ outer:
 	services := parseSDTOutput(output)
 	addLog("info", fmt.Sprintf("[scan] adapter %s: found %d services", adapterID, len(services)))
 
-	writeJSON(w, 200, map[string]any{
+	resp := map[string]any{
 		"adapter":  adapterID,
 		"services": services,
-	})
+	}
+	if len(services) == 0 && len(output) > 0 {
+		preview := output
+		if len(preview) > 2000 {
+			preview = preview[:2000]
+		}
+		resp["debug_output"] = preview
+	}
+	writeJSON(w, 200, resp)
 }
 
 // buildScanLua generates a minimal --stream Lua config for a single adapter,
@@ -176,15 +184,17 @@ func buildScanLua(adapterNum string, a map[string]any) string {
 	if dev := anyStr(a["device"]); dev != "" && dev != "0" {
 		sb.WriteString(fmt.Sprintf("  device = %s,\n", dev))
 	}
+	// budget=true delivers all PIDs (including SDT PID 17) without hardware filtering
+	sb.WriteString("  budget = true,\n")
 	sb.WriteString("})\n\n")
 
-	// Full MPTS (no PNR) so the analyzer sees all SDT entries
+	// Full MPTS (no PNR) — output to loopback UDP so the channel actually starts
 	sb.WriteString("make_channel({\n")
 	sb.WriteString(fmt.Sprintf("  name = %q,\n", "scan_"+n))
 	sb.WriteString(fmt.Sprintf("  id   = %q,\n", "scan_"+n))
 	sb.WriteString("  enable = true,\n")
 	sb.WriteString(fmt.Sprintf("  input  = {\"dvb://dvb%s\"},\n", n))
-	sb.WriteString("  output = {},\n")
+	sb.WriteString("  output = {\"udp://127.0.0.1:29876\"},\n")
 	sb.WriteString("})\n")
 
 	return sb.String()
